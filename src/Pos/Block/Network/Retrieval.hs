@@ -11,6 +11,7 @@ module Pos.Block.Network.Retrieval
        , mkHeadersRequest
        , requestTipOuts
        , needRecovery
+       , requestAndDiscardTip
        ) where
 
 import           Control.Concurrent.STM     (isFullTBQueue, putTMVar, readTVar,
@@ -277,6 +278,7 @@ triggerRecovery sendActions = unlessM isRecoveryMode $ do
                logDebug ("Error happened in triggerRecovery" <> show e)
                throwM e
         logDebug "Recovery triggered ended"
+
 
 -- | Make 'GetHeaders' message using our main chain. This function
 -- chooses appropriate 'from' hashes and puts them into 'GetHeaders'
@@ -684,3 +686,45 @@ blocksRolledBackMsg
     => NonEmpty a -> Text
 blocksRolledBackMsg =
     sformat ("Blocks have been rolled back: "%listJson) . fmap (headerHash @a)
+
+----------------------------------------------------------------------------
+-- Abusive behaviour, to test rate limiting
+----------------------------------------------------------------------------
+
+askForBlock :: forall ssc m.
+       (WorkMode ssc m)
+    => SendActions m
+    -> BlockHeader ssc
+    -> NodeId
+    -> m ()
+askForBlock sendActions header peerId = do
+    logDebug $ sformat ("Ask for block "%shortHashF%" ...") hHash
+    reifyMsgLimit (Proxy @(MsgBlock ssc)) $ \(_ :: Proxy s0) ->
+        withConnectionTo sendActions peerId $ \_peerData (conv :: ConversationActions MsgGetBlocks (LimitedLength s0 (MsgBlock ssc)) m) -> do
+            send conv $ (MsgGetBlocks hHash hHash)
+            -- immediately return, but discard the reply when it is there so we do not get overwhelmed ourselves
+            void . fork . void $ recv conv
+  where
+    hHash = headerHash header
+
+
+fakeRequestTip :: forall ssc m.
+                  (WorkMode ssc m)
+                  => SendActions m -> NodeId -> ConversationActions MsgGetHeaders (MsgHeaders ssc) m -> m ()
+fakeRequestTip sendActions peerId conv = do
+    logDebug "Doing a fake tip request"
+    send conv (MsgGetHeaders [] Nothing)
+    whenJustM (recv conv) handleTip
+  where
+    handleTip (MsgHeaders (NewestFirst (tip:|[]))) = askForBlock sendActions tip peerId
+    handleTip _ = logDebug "Did not get expected pattern in fakeRequestTip"
+
+
+-- | Ask our neighbours for their latest block, but return immediately without using the result
+requestAndDiscardTip :: WorkMode ssc m => SendActions m -> m ()
+requestAndDiscardTip sendActions = do
+    logDebug "Request and Discard tip ..."
+    converseToNeighbors sendActions (fakeRequestTip sendActions) `catch`
+        (\(e :: SomeException) ->
+           logDebug ("Error happened in triggerFakeRecovery" <> show e) >> throwM e)
+    logDebug "Fake recovery triggered ended"

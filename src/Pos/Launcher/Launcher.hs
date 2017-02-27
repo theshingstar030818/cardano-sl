@@ -12,14 +12,15 @@ module Pos.Launcher.Launcher
        ) where
 
 import           Mockable                   (Production)
+import           Universum                  (Maybe (..))
 
 
-
+import           Pos.CLI                    (Abusiveness (..))
 import           Pos.Communication.Protocol (OutSpecs, WorkerSpec)
 import           Pos.Launcher.Param         (NodeParams (..))
 import           Pos.Launcher.Runner        (RealModeResources, runProductionMode,
                                              runStatsMode)
-import           Pos.Launcher.Scenario      (runNode)
+import           Pos.Launcher.Scenario      (runNode, runAbusiveNode)
 import           Pos.Ssc.Class              (SscConstraint)
 import           Pos.Ssc.Class.Types        (SscParams)
 import           Pos.WorkMode               (ProductionMode, StatsMode)
@@ -37,7 +38,9 @@ runNodeProduction
     -> NodeParams
     -> SscParams ssc
     -> Production ()
-runNodeProduction inst plugins np sscnp = runProductionMode inst np sscnp (runNode @ssc plugins)
+runNodeProduction inst plugins np sscnp = case npAbusiveness np of
+    Just AbusiveGetBlocks -> runProductionMode inst np sscnp (runAbusiveNode @ssc plugins)
+    _ -> runProductionMode inst np sscnp (runNode @ssc plugins)
 
 -- | Run full node in benchmarking node
 runNodeStats

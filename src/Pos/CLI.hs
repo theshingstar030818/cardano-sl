@@ -16,6 +16,7 @@ module Pos.CLI
        -- | CLI options and flags
        , RateLimiting (..)
        , CommonArgs (..)
+       , Abusiveness (..)
        , commonArgsParser
        , optionalJSONPath
        , optionalLogPrefix
@@ -133,6 +134,12 @@ data RateLimiting
     | NoRateLimitingFair
     | RateLimitingBlocking !Int
     deriving (Read,Show)
+
+-- | Simulate an abusive node, that needlessly resends requests to its
+-- neighbours
+data Abusiveness = Unabusive | AbusiveGetBlocks
+    deriving (Read, Show)
+
 
 data CommonArgs = CommonArgs
     { dhtExplicitInitial :: !Bool

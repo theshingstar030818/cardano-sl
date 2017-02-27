@@ -58,6 +58,7 @@ data Args = Args
     , updateWithPackage         :: !Bool
     , monitorPort               :: !(Maybe Int)
     , rateLimiting              :: !CLI.RateLimiting
+    , abusiveness               :: !(Maybe CLI.Abusiveness)
     }
   deriving Show
 
@@ -173,6 +174,15 @@ argsParser = do
         metavar "STRATEGY" <>
         value CLI.NoRateLimitingFair <>
         help "Rate-limiting strategy"
+#ifdef DEV_MODE
+    abusiveness <- optional $ option auto $
+        long    "abusiveness" <>
+        metavar "Unnabusive | AbusiveGetBlocks" <>
+        help    "Abusiveness of a node"
+#else
+    let abusiveness = Nothing
+#endif
+
     pure Args{..}
   where
     peerHelpMsg =

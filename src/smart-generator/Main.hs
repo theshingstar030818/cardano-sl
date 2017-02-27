@@ -285,6 +285,7 @@ main = do
                 , npUpdateWithPkg = True
                 , npUpdateServers = []
                 , npReportServers = []
+                , npAbusiveness   = Nothing
                 }
             gtParams =
                 GtParams

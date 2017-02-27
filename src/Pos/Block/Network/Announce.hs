@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 -- | Announcements related to blocks.
 
 module Pos.Block.Network.Announce

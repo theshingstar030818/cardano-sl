@@ -10,7 +10,7 @@ import           Pos.Util.TimeWarp   (NetworkAddress)
 import           System.Wlog         (LoggerName)
 import           Universum
 
-import           Pos.CLI             (RateLimiting (..))
+import           Pos.CLI             (RateLimiting (..), Abusiveness)
 import           Pos.Crypto          (SecretKey)
 import           Pos.DHT.Model.Types (DHTKey, DHTNode)
 import           Pos.Security.CLI    (AttackTarget, AttackType)
@@ -55,4 +55,6 @@ data NodeParams = NodeParams
     , npUpdateWithPkg :: !Bool              -- ^ If `True` then use installer update mechanism
     , npUpdateServers :: ![Text]            -- ^ List of update server URLs
     , npReportServers :: ![Text]            -- ^ List of report server URLs
+    , npAbusiveness   :: !(Maybe Abusiveness)
+                                            -- ^ Allows simulating an abusive node
     } deriving (Show)

@@ -7,6 +7,7 @@
 module Pos.Block.Worker
        ( blkOnNewSlot
        , blkWorkers
+       , abusiveGetBlocksWorker
        ) where
 
 import           Control.Lens                (ix)
@@ -14,16 +15,18 @@ import           Data.Default                (def)
 import           Formatting                  (bprint, build, sformat, shown, (%))
 import           Mockable                    (delay, fork)
 import           Pos.Communication.Protocol  (SendActions)
-import           Serokell.Util               (VerificationRes (..), listJson, pairF)
-import           System.Wlog                 (WithLogger, logDebug, logInfo, logWarning)
+import           Serokell.Util               (VerificationRes (..), listJson, pairF, sec)
+import           System.Wlog                 (WithLogger, logDebug, logError, logInfo, logWarning)
 import           Universum
 
 import           Pos.Binary.Communication    ()
 import           Pos.Block.Logic             (createGenesisBlock, createMainBlock)
 import           Pos.Block.Network.Announce  (announceBlock, announceBlockOuts)
-import           Pos.Block.Network.Retrieval (retrievalWorker)
+import           Pos.Block.Network.Retrieval (retrievalWorker, requestAndDiscardTip)
+import           Pos.Block.Network.Types     (MsgBlock (..), MsgGetBlocks (..),
+                                              MsgGetHeaders (..), MsgHeaders (..))
 import           Pos.Communication.Protocol  (OutSpecs, Worker', WorkerSpec,
-                                              onNewSlotWorker)
+                                              convH, onNewSlotWorker, toOutSpecs, worker)
 import           Pos.Constants               (networkDiameter)
 import           Pos.Context                 (getNodeContext, ncPublicKey)
 import           Pos.Core.Address            (addressHash)
@@ -202,3 +205,24 @@ behindNatWorker = worker requestTipOuts $ \sendActions -> do
             action `catch` handler
     action `catch` handler
 #endif
+
+abusiveGetBlocksWorker :: WorkMode ssc m => (WorkerSpec m, OutSpecs)
+abusiveGetBlocksWorker = worker abusiveGetBlocksOuts abusiveGetBlocksWorkerImpl
+
+abusiveGetBlocksWorkerImpl ::
+       WorkMode ssc m
+    => SendActions m -> m ()
+abusiveGetBlocksWorkerImpl sendActions = action `catch` handler
+  where
+    action = forever $ requestAndDiscardTip sendActions
+    handler (e :: SomeException) = do
+        logError $ "Error happened in abusiveGetBlocksWorker: " <> show e
+        delay (sec 10)
+        action
+
+abusiveGetBlocksOuts :: OutSpecs
+abusiveGetBlocksOuts =
+    toOutSpecs [ convH (Proxy :: Proxy MsgGetHeaders)
+                       (Proxy :: Proxy (MsgHeaders ssc))
+               , convH (Proxy :: Proxy MsgGetBlocks)
+                       (Proxy :: Proxy (MsgBlock ssc)) ]
