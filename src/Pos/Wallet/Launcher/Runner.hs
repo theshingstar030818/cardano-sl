@@ -8,6 +8,7 @@ module Pos.Wallet.Launcher.Runner
 
 import           Formatting                  (build, sformat, (%))
 import           Mockable                    (Production, bracket, fork, sleepForever)
+import qualified Network.RateLimiting        as RL
 import qualified STMContainers.Map           as SM
 import           System.Wlog                 (logDebug, logInfo, usingLoggerName)
 import           Universum                   hiding (bracket)
@@ -80,13 +81,14 @@ runRawRealWallet
 runRawRealWallet res WalletParams {..} listeners (ActionSpec action, outs) =
     usingLoggerName lpRunnerTag . bracket openDB closeDB $ \db -> do
         let walletContext = WalletContext {wcUnit = mempty}
+        let rateLimiting = RL.rlLift . RL.rlLift . RL.rlLift . RL.rlLift . RL.rlLift . RL.rlLift $ rmRateLimiting res
         stateM <- liftIO SM.newIO
         runContextHolder walletContext .
             runWalletDB db .
             runKeyStorage wpKeyFilePath .
             runKademliaDHT (rmDHT res) .
             runPeerStateHolder stateM .
-            runServer_ (rmTransport res) listeners outs . ActionSpec $ \vI sa ->
+            runServer_ (rmTransport res) rateLimiting listeners outs . ActionSpec $ \vI sa ->
             logInfo "Started wallet, joining network" >> action vI sa
   where
     LoggingParams {..} = bpLoggingParams wpBaseParams

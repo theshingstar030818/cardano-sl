@@ -39,7 +39,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/serokell/time-warp-nt.git
-    commit: 8631647810b950a21735d1466fa72348626213ed
+    commit: d2fdc70b4dd885eb2f9a222bc1f12cc068392f9b
   extra-dep: true
 # These two are needed for time-warp-nt
 - location:
@@ -53,6 +53,10 @@ packages:
 - location:
     git: https://github.com/input-output-hk/cardano-crypto
     commit: 838b064d8a59286142aa2fe14434fe7601896ddb
+  extra-dep: true
+- location:
+    git: https://github.com/serokell/hslogger
+    commit: cf5c742a07ef12e8eb2506775c77f22befa23d8f
   extra-dep: true
 #- location:
 #    git: https://github.com/haskell-crypto/cryptonite.git

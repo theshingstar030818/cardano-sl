@@ -250,6 +250,7 @@ main = do
             , bpDHTKey             = Nothing
             , bpDHTExplicitInitial = CLI.dhtExplicitInitial goCommonArgs
             , bpKademliaDump       = "kademlia.dump"
+            , bpRateLimiting       = goRateLimiting
             }
 
     bracketResources baseParams $ \res -> do

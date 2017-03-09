@@ -21,14 +21,15 @@ import qualified Pos.CLI                as CLI
 import           Pos.Util.TimeWarp      (NetworkAddress)
 
 data WalletOptions = WalletOptions
-    { woDbPath      :: !FilePath
-    , woRebuildDb   :: !Bool
-    , woIpPort      :: !NetworkAddress -- ^ DHT/Blockchain port
-    , woKeyFilePath :: !FilePath       -- ^ Path to file with secret keys
-    , woDebug       :: !Bool           -- ^ Run in debug mode (with genesis keys included)
-    , woJLFile      :: !(Maybe FilePath)
-    , woCommonArgs  :: !CLI.CommonArgs -- ^ Common CLI args, including initial DHT nodes
-    , woAction      :: !WalletAction
+    { woDbPath       :: !FilePath
+    , woRebuildDb    :: !Bool
+    , woIpPort       :: !NetworkAddress -- ^ DHT/Blockchain port
+    , woKeyFilePath  :: !FilePath       -- ^ Path to file with secret keys
+    , woDebug        :: !Bool           -- ^ Run in debug mode (with genesis keys included)
+    , woJLFile       :: !(Maybe FilePath)
+    , woCommonArgs   :: !CLI.CommonArgs -- ^ Common CLI args, including initial DHT nodes
+    , woAction       :: !WalletAction
+    , woRateLimiting :: !CLI.RateLimiting -- ^ Rate-limiting strategy
     }
 
 data WalletAction = Repl
@@ -95,6 +96,11 @@ optionsParser = do
         CLI.commonArgsParser "Initial DHT peer (may be many)"
     woAction <-
         actionParser
+    woRateLimiting <- option auto $
+        long "rate-limiting" <>
+        metavar "STRATEGY" <>
+        value CLI.NoRateLimitingFair <>
+        help "Rate-limiting strategy"
 
     pure WalletOptions{..}
 

@@ -57,6 +57,7 @@ data Args = Args
     , updateLatestPath          :: !FilePath
     , updateWithPackage         :: !Bool
     , monitorPort               :: !(Maybe Int)
+    , rateLimiting              :: !CLI.RateLimiting
     }
   deriving Show
 
@@ -167,7 +168,11 @@ argsParser = do
         long    "monitor-port" <>
         metavar "INT" <>
         help    "Run web monitor on this port"
-
+    rateLimiting <- option auto $
+        long "rate-limiting" <>
+        metavar "STRATEGY" <>
+        value CLI.NoRateLimitingFair <>
+        help "Rate-limiting strategy"
     pure Args{..}
   where
     peerHelpMsg =

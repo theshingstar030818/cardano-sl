@@ -31,7 +31,8 @@ data GenOptions = GenOptions
     , goMOfNParams      :: !(Maybe (Int, Int)) -- ^ If this is provided, send M-of-N script transactions instead of P2PKH
     , goJLFile          :: !(Maybe FilePath)
     , goCommonArgs      :: !CLI.CommonArgs -- ^ Common CLI arguments, including initial DHT nodes
-    , goIpPort          :: !NetworkAddress         -- ^ DHT/Blockchain ip/port
+    , goIpPort          :: !NetworkAddress -- ^ DHT/Blockchain ip/port
+    , goRateLimiting    :: !CLI.RateLimiting -- ^ Rate-limiting strategy
     }
 
 optionsParser :: Parser GenOptions
@@ -94,6 +95,11 @@ optionsParser = do
         CLI.commonArgsParser "Initial DHT peer (may be many)"
     goIpPort <-
         CLI.ipPortOption ("0.0.0.0", 24962)
+    goRateLimiting <- option auto $
+        long "rate-limiting" <>
+        metavar "STRATEGY" <>
+        value CLI.NoRateLimitingFair <>
+        help "Rate-limiting strategy"
     return GenOptions{..}
 
 optsInfo :: ParserInfo GenOptions

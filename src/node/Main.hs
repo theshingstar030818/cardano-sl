@@ -90,6 +90,7 @@ baseParams loggingTag args@Args {..} = do
         , bpDHTKey = dhtKey
         , bpDHTExplicitInitial = CLI.dhtExplicitInitial commonArgs
         , bpKademliaDump = kademliaDumpPath
+        , bpRateLimiting = rateLimiting
         }
 
 action :: Args -> RealModeResources -> Production ()

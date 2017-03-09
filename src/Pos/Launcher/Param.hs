@@ -10,6 +10,7 @@ import           Pos.Util.TimeWarp   (NetworkAddress)
 import           System.Wlog         (LoggerName)
 import           Universum
 
+import           Pos.CLI             (RateLimiting (..))
 import           Pos.Crypto          (SecretKey)
 import           Pos.DHT.Model.Types (DHTKey, DHTNode)
 import           Pos.Security.CLI    (AttackTarget, AttackType)
@@ -33,6 +34,7 @@ data BaseParams = BaseParams
     , bpDHTExplicitInitial :: !Bool
     , bpLoggingParams      :: !LoggingParams  -- ^ Logger parameters
     , bpKademliaDump       :: !FilePath       -- ^ Path to kademlia dump file
+    , bpRateLimiting       :: !RateLimiting   -- ^ Rate-limiting strategy
     } deriving (Show)
 
 -- | Contains algorithm specific & storage parameters for Node.

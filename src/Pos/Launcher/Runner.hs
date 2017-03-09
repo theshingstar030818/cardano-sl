@@ -39,7 +39,7 @@ import           Mockable                    (CurrentTime, Mockable, MonadMockab
                                               Production (..), Throw, bracket,
                                               currentTime, delay, finally, fork,
                                               killThread, throw)
-import           Network.QDisc.Fair          (fairQDisc)
+import qualified Network.RateLimiting        as RL
 import           Network.Transport           (Transport, closeTransport)
 import           Network.Transport.Concrete  (concrete)
 import qualified Network.Transport.TCP       as TCP
@@ -56,7 +56,7 @@ import           System.Wlog                 (LoggerConfig (..), WithLogger, log
 import           Universum                   hiding (bracket, finally)
 
 import           Pos.Binary                  ()
-import           Pos.CLI                     (readLoggerConfig)
+import qualified Pos.CLI                     as CLI
 import           Pos.Communication           (ActionSpec (..), BiP (..),
                                               ConversationActions (..), InSpecs (..),
                                               ListenersWithOut, OutSpecs (..),
@@ -110,8 +110,9 @@ import           Pos.WorkMode                (MinWorkMode, ProductionMode, RawRe
                                               ServiceMode, StatsMode)
 
 data RealModeResources = RealModeResources
-    { rmTransport :: Transport
-    , rmDHT       :: KademliaDHTInstance
+    { rmTransport    :: Transport
+    , rmDHT          :: KademliaDHTInstance
+    , rmRateLimiting :: RL.RateLimiting Production
     }
 
 ----------------------------------------------------------------------------
@@ -216,6 +217,11 @@ runRawRealMode res np@NodeParams {..} sscnp listeners outSpecs (ActionSpec actio
                Nothing        -> return ()
                Just ekgServer -> stopMonitor ekgServer
 
+       let rateLimiting = RL.rlLift . RL.rlLift . RL.rlLift .
+               RL.rlLift . RL.rlLift . RL.rlLift . RL.rlLift .
+               RL.rlLift . RL.rlLift . RL.rlLift . RL.rlLift $
+               rmRateLimiting res
+
        runDBHolder modernDBs .
           runCH np initNC .
           runSlottingHolder slottingVar .
@@ -226,7 +232,7 @@ runRawRealMode res np@NodeParams {..} sscnp listeners outSpecs (ActionSpec actio
           runUSHolder .
           runKademliaDHT (rmDHT res) .
           runPeerStateHolder stateM .
-          runServer (rmTransport res) listeners outSpecs startMonitoring stopMonitoring . ActionSpec $
+          runServer (rmTransport res) rateLimiting listeners outSpecs startMonitoring stopMonitoring . ActionSpec $
               \vI sa -> nodeStartMsg npBaseParams >> action vI sa
   where
     LoggingParams {..} = bpLoggingParams npBaseParams
@@ -247,22 +253,27 @@ runServiceMode
     -> Production a
 runServiceMode res bp@BaseParams {..} listeners outSpecs (ActionSpec action) = do
     stateM <- liftIO SM.newIO
-    usingLoggerName (lpRunnerTag bpLoggingParams) .
-        runKademliaDHT (rmDHT res) .
-        runPeerStateHolder stateM .
-        runServer_ (rmTransport res) listeners outSpecs . ActionSpec $ \vI sa ->
+    let runM = usingLoggerName (lpRunnerTag bpLoggingParams) .
+            runKademliaDHT (rmDHT res) .
+            runPeerStateHolder stateM
+    let rateLimiting = RL.rlLift . RL.rlLift . RL.rlLift $ rmRateLimiting res
+    runM .
+        runServer_ (rmTransport res) rateLimiting listeners outSpecs . ActionSpec $ \vI sa ->
         nodeStartMsg bp >> action vI sa
+
+-- toServiceMode ::
 
 runServer
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m, MonadDHT m)
     => Transport
+    -> RL.RateLimiting m
     -> m (ListenersWithOut m)
     -> OutSpecs
     -> (Node m -> m t)
     -> (t -> m ())
     -> ActionSpec m b
     -> m b
-runServer transport packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
+runServer transport rateLimiting packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
     ourPeerId <- PeerId . getMeaningPart <$> currentNodeKey
     packedLS  <- packedLS_M
     let (listeners', InSpecs ins, OutSpecs outs) = unpackLSpecs packedLS
@@ -271,7 +282,7 @@ runServer transport packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec a
         listeners = listeners' ourVerInfo
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo "%build) ourVerInfo
-    node (concrete transport) stdGen BiP (ourPeerId, ourVerInfo) $ \__node ->
+    node (concrete transport) stdGen rateLimiting BiP (ourPeerId, ourVerInfo) $ \__node ->
         NodeAction listeners $ \sendActions -> do
             t <- withNode __node
             a <- action ourVerInfo sendActions `finally` afterNode t
@@ -279,9 +290,9 @@ runServer transport packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec a
 
 runServer_
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m, MonadDHT m)
-    => Transport -> ListenersWithOut m -> OutSpecs -> ActionSpec m b -> m b
-runServer_ transport packedLS outSpecs =
-    runServer transport (pure packedLS) outSpecs acquire release
+    => Transport -> RL.RateLimiting m -> ListenersWithOut m -> OutSpecs -> ActionSpec m b -> m b
+runServer_ transport rateLimiting packedLS outSpecs =
+    runServer transport rateLimiting (pure packedLS) outSpecs acquire release
   where
     acquire = const pass
     release = const pass
@@ -391,7 +402,7 @@ getRealLoggerConfig LoggingParams{..} = do
                      mapperB dhtMapper <>
                      (mempty { _lcFilePrefix = lpHandlerPrefix
                              , _lcRoundVal = Just 5 })
-    cfg <- readLoggerConfig lpConfigPath
+    cfg <- CLI.readLoggerConfig lpConfigPath
     pure $ cfg <> cfgBuilder
   where
     dhtMapper name | name == "dht" = dhtLoggerName (Proxy :: Proxy (RawRealMode ssc))
@@ -432,13 +443,15 @@ bracketDHTInstance BaseParams {..} action = bracket acquire release action
 
 createTransport
     :: (MonadIO m, WithLogger m, Mockable Throw m)
-    => String -> Word16 -> m Transport
-createTransport ip port = do
+    => String -> Word16 -> RL.RateLimiting m2 -> m Transport
+createTransport ip port rateLimiting = do
     let tcpParams =
             (TCP.defaultTCPParameters
              { TCP.transportConnectTimeout =
                    Just $ fromIntegral networkConnectionTimeout
-             , TCP.tcpNewQDisc = fairQDisc $ \_ -> return Nothing
+             , TCP.tcpNewQDisc = case rateLimiting of
+                     RL.NoRateLimiting qDisc -> qDisc
+                     RL.RateLimiting{..} -> rlQDisc
              })
     transportE <-
         liftIO $ TCP.createTransport "0.0.0.0" (show port) ((,) ip) tcpParams
@@ -448,18 +461,22 @@ createTransport ip port = do
             throw e
         Right transport -> return transport
 
-bracketTransport :: BaseParams -> (Transport -> Production a) -> Production a
-bracketTransport BaseParams {..} =
+bracketTransport :: BaseParams -> RL.RateLimiting Production -> (Transport -> Production a) -> Production a
+bracketTransport BaseParams {..} rateLimiting =
     bracket
-        (withLog $ createTransport (BS8.unpack $ fst bpIpPort) (snd bpIpPort))
+        (withLog $ createTransport (BS8.unpack $ fst bpIpPort) (snd bpIpPort) rateLimiting)
         (liftIO . closeTransport)
   where
     withLog = usingLoggerName $ lpRunnerTag bpLoggingParams
 
 bracketResources :: BaseParams -> (RealModeResources -> Production a) -> IO a
-bracketResources bp action =
+bracketResources bp action = do
+    rmRateLimiting <- runProduction $ case (bpRateLimiting bp) of
+        CLI.NoRateLimitingUnbounded -> return RL.rateLimitingUnbounded
+        CLI.NoRateLimitingFair -> return RL.rateLimitingFair
+        CLI.RateLimitingBlocking n -> RL.rateLimitingBlocking runProduction n
     loggerBracket (bpLoggingParams bp) .
-    runProduction .
-    bracketDHTInstance bp $ \rmDHT ->
-    bracketTransport bp $ \rmTransport ->
+        runProduction .
+        bracketDHTInstance bp $ \rmDHT ->
+        bracketTransport bp rmRateLimiting $ \rmTransport ->
         action $ RealModeResources {..}
