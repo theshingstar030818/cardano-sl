@@ -43,7 +43,8 @@ import qualified Network.RateLimiting        as RL
 import           Network.Transport           (Transport, closeTransport)
 import           Network.Transport.Concrete  (concrete)
 import qualified Network.Transport.TCP       as TCP
-import           Node                        (Node, NodeAction (..), hoistSendActions,
+import           Node                        (Node, NodeAction (..),
+                                              defaultNodeEnvironment, hoistSendActions,
                                               node)
 import           Node.Util.Monitor           (setupMonitor, stopMonitor)
 import           Serokell.Util               (sec)
@@ -282,7 +283,7 @@ runServer transport rateLimiting packedLS_M (OutSpecs wouts) withNode afterNode 
         listeners = listeners' ourVerInfo
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo "%build) ourVerInfo
-    node (concrete transport) stdGen rateLimiting BiP (ourPeerId, ourVerInfo) $ \__node ->
+    node (concrete transport) stdGen rateLimiting BiP (ourPeerId, ourVerInfo) defaultNodeEnvironment $ \__node ->
         NodeAction listeners $ \sendActions -> do
             t <- withNode __node
             a <- action ourVerInfo sendActions `finally` afterNode t
@@ -449,9 +450,7 @@ createTransport ip port rateLimiting = do
             (TCP.defaultTCPParameters
              { TCP.transportConnectTimeout =
                    Just $ fromIntegral networkConnectionTimeout
-             , TCP.tcpNewQDisc = case rateLimiting of
-                     RL.NoRateLimiting qDisc -> qDisc
-                     RL.RateLimiting{..} -> rlQDisc
+             , TCP.tcpNewQDisc = RL.rlQDisc rateLimiting
              })
     transportE <-
         liftIO $ TCP.createTransport "0.0.0.0" (show port) ((,) ip) tcpParams
@@ -472,8 +471,8 @@ bracketTransport BaseParams {..} rateLimiting =
 bracketResources :: BaseParams -> (RealModeResources -> Production a) -> IO a
 bracketResources bp action = do
     rmRateLimiting <- runProduction $ case (bpRateLimiting bp) of
-        CLI.NoRateLimitingUnbounded -> return RL.rateLimitingUnbounded
-        CLI.NoRateLimitingFair -> return RL.rateLimitingFair
+        CLI.NoRateLimitingUnbounded -> return RL.noRateLimitingUnbounded
+        CLI.NoRateLimitingFair -> return RL.noRateLimitingFair
         CLI.RateLimitingBlocking n -> RL.rateLimitingBlocking runProduction n
     loggerBracket (bpLoggingParams bp) .
         runProduction .

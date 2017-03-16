@@ -176,14 +176,10 @@ argsParser = do
         metavar "STRATEGY" <>
         value CLI.NoRateLimitingFair <>
         help "Rate-limiting strategy"
-#ifdef DEV_MODE
-    abusiveness <- optional $ option auto $
+    abusiveness <- option auto $
         long    "abusiveness" <>
         metavar "Unnabusive | AbusiveGetBlocks" <>
         help    "Abusiveness of a node"
-#else
-    let abusiveness = Nothing
-#endif
 
     pure Args{..}
   where
