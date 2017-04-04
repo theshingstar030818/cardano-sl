@@ -21,8 +21,8 @@ import           Universum         hiding (bracket, finally)
 
 import           Data.Time.Units   (Microsecond, Second, convertUnit)
 import           Formatting        (sformat, shown, stext, (%))
-import           Mockable          (Async, Bracket, Delay, Fork, Mockable, async, bracket,
-                                    cancel, delay, finally, fork, killThread, waitAny)
+import           Mockable          (Async, Bracket, Delay, Fork, Mockable, async,
+                                    cancel, delay, finally, waitAny, withAsync)
 import           System.Wlog       (WithLogger, logWarning)
 
 import           Pos.Crypto.Random (randomNumber)
@@ -38,17 +38,25 @@ data WaitingDelta
     deriving (Show)
 
 -- | Constraint for something that can be logged in parallel with other action.
-type CanLogInParallel m = (Mockable Delay m, Mockable Fork m, WithLogger m, Mockable Bracket m)
+type CanLogInParallel m = (Mockable Delay m, Mockable Async m, WithLogger m)
 
 
 -- | Run action and print warning if it takes more time than expected.
 logWarningLongAction :: CanLogInParallel m => WaitingDelta -> Text -> m a -> m a
 logWarningLongAction delta actionTag action =
-    bracket (fork $ waitAndWarn delta) onFinish (const action)
+    -- Previous implementation was
+    --
+    --   bracket (fork $ waitAndWarn delta) killThread (const action)
+    --
+    -- but this has a subtle problem: 'killThread' can be interrupted even
+    -- when exceptions are masked, so it's possible that the forked thread is
+    -- left running, polluting the logs with misinformation.
+    --
+    -- 'withAsync' is assumed to take care of this, and indeed it does for
+    -- 'Production's implementation, which uses the definition from the async
+    -- package: 'uninterruptibleCancel' is used to kill the thread.
+    withAsync (waitAndWarn delta) (const action)
   where
-    onFinish logThreadId = do
-        killThread logThreadId
-        --logDebug (sformat ("Action `"%stext%"` finished") actionTag)
     printWarning t = logWarning $ sformat ("Action `"%stext%"` took more than "%shown)
                                   actionTag
                                   t
