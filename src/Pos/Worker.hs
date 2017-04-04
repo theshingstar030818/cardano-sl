@@ -35,7 +35,10 @@ allWorkers
 allWorkers = mconcatPair
     [
       -- Only workers of "onNewSlot" type
+
+      -- TODO cannot have this DHT worker here. It assumes Kademlia.
       wrap' "dht"        $ dhtWorkers
+
     , wrap' "ssc"        $ untag sscWorkers
     , wrap' "security"   $ untag securityWorkers
     , wrap' "lrc"        $ first pure lrcOnNewSlotWorker
