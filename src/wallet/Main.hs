@@ -14,9 +14,14 @@ import           Data.List                  ((!!))
 import qualified Data.List.NonEmpty         as NE
 import qualified Data.Set                   as S (fromList, toList)
 import qualified Data.Text                  as T
+import qualified Data.Text.IO               as T
 import           Data.Time.Units            (convertUnit)
+import           Data.Void                  (absurd)
 import           Formatting                 (build, int, sformat, stext, (%))
-import           Mockable                   (Production, delay)
+import           Mockable                   (Mockable, SharedAtomic, SharedAtomicT,
+                                             currentTime, delay, Production,
+                                             modifySharedAtomic, newSharedAtomic,
+                                             race)
 import           Network.Transport.Abstract (Transport, hoistTransport)
 import           Options.Applicative        (execParser)
 import           System.IO                  (hFlush, stdout)
@@ -60,6 +65,7 @@ import           Pos.Wallet                 (WalletMode, WalletParams (..),
                                              runWalletStaticPeers, sendProposalOuts,
                                              sendVoteOuts, submitUpdateProposal,
                                              submitVote)
+
 #ifdef WITH_WEB
 import           Pos.Wallet.Web             (walletServeWebLite, walletServerOuts)
 #endif
@@ -71,7 +77,17 @@ import           WalletOptions              (WalletAction (..), WalletOptions (.
 
 type CmdRunner = ReaderT ([SecretKey], [NodeId])
 
-runCmd :: WalletMode ssc m => SendActions m -> Command -> CmdRunner m ()
+data TxCount = TxCount
+    { txcSubmitted :: !Int
+    , txcFailed :: !Int }
+
+addTxSubmit :: Mockable SharedAtomic m => SharedAtomicT m TxCount -> m ()
+addTxSubmit mvar = modifySharedAtomic mvar (\(TxCount submitted failed) -> return (TxCount (submitted + 1) failed, ()))
+
+addTxFailed :: Mockable SharedAtomic m => SharedAtomicT m TxCount -> m ()
+addTxFailed mvar = modifySharedAtomic mvar (\(TxCount submitted failed) -> return (TxCount submitted (failed + 1), ()))
+
+runCmd :: forall ssc m. (WalletMode ssc m) => SendActions m -> Command -> CmdRunner m ()
 runCmd _ (Balance addr) = lift (getBalance addr) >>=
                           putText . sformat ("Current balance: "%coinF)
 runCmd sendActions (Send idx outputs) = do
@@ -90,24 +106,38 @@ runCmd sendActions (Send idx outputs) = do
     case etx of
         Left err -> putText $ sformat ("Error: "%stext) err
         Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
-runCmd sendActions (SendToAllGenesis amount delay_) = do
+runCmd sendActions (SendToAllGenesis amount delay_ tpsSentFile) = do
     (skeys, na) <- ask
-    for_ skeys $ \key -> do
-        let txOut = TxOut {
-            txOutAddress = makePubKeyAddress (toPublic key),
-            txOutValue = amount
-        }
-        etx <-
-            lift $
-            submitTx
-                sendActions
-                (fakeSigner key)
-                na
-                (NE.fromList [TxOutAux txOut []])
-        case etx of
-            Left err -> putText $ sformat ("Error: "%stext) err
-            Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
-        delay $ ms delay_
+    tpsMVar <- newSharedAtomic $ TxCount 0 0
+    h <- liftIO $ openFile tpsSentFile WriteMode
+    liftIO $ T.hPutStrLn h "time,dt,txSent,txFailed,delay,"
+    let writeTPS :: CmdRunner m void
+        -- every 20 seconds, write the number of sent and failed transactions to a CSV file.
+        writeTPS = do
+            delay (sec 20)
+            currentTime <- Timestamp <$> currentTime
+            modifySharedAtomic tpsMVar $ \(TxCount submitted failed) -> do
+                liftIO $ T.hPutStrLn h $ T.intercalate "," [T.pack . show $ currentTime, "20", T.pack . show $ submitted, T.pack . show $ failed, T.pack . show $ delay_]
+                return (TxCount 0 0, ())
+            writeTPS
+    let sendTxs :: CmdRunner m ()
+        sendTxs = forM_ skeys $ \key -> do
+            let txOut = TxOut {
+                txOutAddress = makePubKeyAddress (toPublic key),
+                txOutValue = amount
+            }
+            etx <-
+                lift $
+                submitTx
+                    sendActions
+                    (fakeSigner key)
+                    na
+                    (NE.fromList [TxOutAux txOut []])
+            case etx of
+                Left err -> addTxFailed tpsMVar >> putText (sformat ("Error: "%stext) err)
+                Right tx -> addTxSubmit tpsMVar >> putText (sformat ("Submitted transaction: "%txaF) tx)
+            delay $ ms delay_
+    either absurd identity <$> race writeTPS sendTxs
 runCmd sendActions v@(Vote idx decision upid) = do
     logDebug $ "Submitting a vote :" <> show v
     (_, na) <- ask

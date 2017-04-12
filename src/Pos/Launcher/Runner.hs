@@ -41,8 +41,8 @@ import           Network.Transport.Concrete   (concrete)
 import qualified Network.Transport.TCP        as TCP
 import           Node                         (Node, NodeAction (..),
                                                defaultNodeEnvironment, hoistSendActions,
-                                               node, simpleNodeEndPoint)
-import           Node.Util.Monitor            (setupMonitor, stopMonitor)
+                                               node, simpleNodeEndPoint, noReceiveDelay)
+import           Node.Util.Monitor            (startMonitor, stopMonitor)
 import qualified STMContainers.Map            as SM
 import           System.Random                (newStdGen)
 import           System.Wlog                  (LoggerConfig (..), WithLogger, logError,
@@ -172,7 +172,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
 
         let startMonitoring node' = case lpEkgPort of
                 Nothing   -> return Nothing
-                Just port -> Just <$> setupMonitor port runIO node'
+                Just port -> Just <$> startMonitor port runIO node'
 
         let stopMonitoring it = whenJust it stopMonitor
 
@@ -250,7 +250,7 @@ runServer transport packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec a
         listeners = listeners' ourVerInfo
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo "%build) ourVerInfo
-    node (simpleNodeEndPoint transport) stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
+    node (simpleNodeEndPoint transport) (const noReceiveDelay) stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
         -- CSL-831 TODO use __peerVerInfo
         NodeAction (\__peerVerInfo -> listeners) $ \sendActions -> do
             t <- withNode __node
