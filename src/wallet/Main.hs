@@ -21,10 +21,9 @@ import           Formatting                 (build, int, sformat, stext, (%))
 import           Mockable                   (Mockable, SharedAtomic, SharedAtomicT,
                                              currentTime, delay, Production,
                                              modifySharedAtomic, newSharedAtomic,
-                                             race)
+                                             race, fork)
 import           Network.Transport.Abstract (Transport, hoistTransport)
 import           Options.Applicative        (execParser)
-import           System.IO                  (hFlush, stdout)
 import           System.IO                  (BufferMode (LineBuffering),
                                              hClose, hFlush, hSetBuffering, stdout)
 import           System.Wlog                (logDebug, logError, logInfo, logWarning)
@@ -110,7 +109,7 @@ runCmd sendActions (Send idx outputs) = do
         Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
 runCmd sendActions (SendToAllGenesis amount delay_ tpsSentFile) = do
     (skeys, na) <- ask
-    tpsMVar <- newSharedAtomic $ TxCount 0 0
+    tpsMVar :: SharedAtomicT (CmdRunner m) TxCount <- newSharedAtomic $ TxCount 0 0
     h <- liftIO $ openFile tpsSentFile WriteMode -- TODO: I'd like to bracket here, but I don't think WalletMode includes MonadBaseControl IO.
     liftIO $ hSetBuffering h LineBuffering
     liftIO $ T.hPutStrLn h "time,dt,txSent,txFailed,delay,"
@@ -125,20 +124,21 @@ runCmd sendActions (SendToAllGenesis amount delay_ tpsSentFile) = do
             writeTPS
     let sendTxs :: CmdRunner m ()
         sendTxs = forM_ skeys $ \key -> do
-            let txOut = TxOut {
-                txOutAddress = makePubKeyAddress (toPublic key),
-                txOutValue = amount
-            }
-            etx <-
-                lift $
-                submitTx
-                    sendActions
-                    (fakeSigner key)
-                    na
-                    (NE.fromList [TxOutAux txOut []])
-            case etx of
-                Left err -> addTxFailed tpsMVar >> putText (sformat ("Error: "%stext) err)
-                Right tx -> addTxSubmit tpsMVar >> putText (sformat ("Submitted transaction: "%txaF) tx)
+            void . fork $ do
+                let txOut = TxOut {
+                    txOutAddress = makePubKeyAddress (toPublic key),
+                    txOutValue = amount
+                }
+                etx <-
+                    lift $
+                    submitTx
+                        sendActions
+                        (fakeSigner key)
+                        na
+                        (NE.fromList [TxOutAux txOut []])
+                case etx of
+                    Left err -> addTxFailed tpsMVar >> putText (sformat ("Error: "%stext) err)
+                    Right tx -> addTxSubmit tpsMVar >> putText (sformat ("Submitted transaction: "%txaF) tx)
             delay $ ms delay_
     putStr $ unwords ["Sending", show (length skeys), "transactions"]
     either absurd identity <$> race writeTPS sendTxs
