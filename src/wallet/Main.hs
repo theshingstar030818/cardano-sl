@@ -72,7 +72,7 @@ import           Pos.Wallet                 (WalletMode, WalletParams (..),
 import           Pos.Wallet.Web             (walletServeWebLite, walletServerOuts)
 #endif
 
-import           Command                    (Command (..), parseCommand)
+import           Command                    (Command (..), SendMode (..), parseCommand)
 import qualified Network.Transport.TCP      as TCP (TCPAddr (..))
 import           WalletOptions              (WalletAction (..), WalletOptions (..),
                                              optsInfo)
@@ -108,24 +108,25 @@ runCmd sendActions (Send idx outputs) = do
     case etx of
         Left err -> putText $ sformat ("Error: "%stext) err
         Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
-runCmd sendActions (SendToAllGenesis amount delay_ tpsSentFile) = do
+runCmd sendActions (SendToAllGenesis amount delay_ sendMode tpsSentFile) = do
     (skeys, na) <- ask
+    let nNeighbours = length na
     let slotDuration = fromIntegral (toMicroseconds genesisSlotDuration) `div` 1000000 :: Int
     tpsMVar :: SharedAtomicT (CmdRunner m) TxCount <- newSharedAtomic $ TxCount 0 0
     h <- liftIO $ openFile tpsSentFile WriteMode -- TODO: I'd like to bracket here, but I don't think WalletMode includes MonadBaseControl IO.
     liftIO $ hSetBuffering h LineBuffering
-    liftIO $ T.hPutStrLn h "time,dt,txSent,txFailed,delay,"
+    liftIO $ T.hPutStrLn h "time,dt,txSent,txFailed,delay,sendmode"
     let writeTPS :: CmdRunner m void
         -- every 20 seconds, write the number of sent and failed transactions to a CSV file.
         writeTPS = do
             delay (sec slotDuration)
             currentTime <- Timestamp <$> currentTime
             modifySharedAtomic tpsMVar $ \(TxCount submitted failed) -> do
-                liftIO $ T.hPutStrLn h $ T.intercalate "," [T.pack . show $ currentTime, T.pack . show $ slotDuration, T.pack . show $ submitted, T.pack . show $ failed, T.pack . show $ delay_]
+                liftIO $ T.hPutStrLn h $ T.intercalate "," [T.pack . show $ currentTime, T.pack . show $ slotDuration, T.pack . show $ submitted, T.pack . show $ failed, T.pack . show $ delay_, T.pack . show $ sendMode]
                 return (TxCount 0 0, ())
             writeTPS
     let sendTxs :: CmdRunner m ()
-        sendTxs = forM_ skeys $ \key -> do
+        sendTxs = forM_ (zip skeys [0..]) $ \(key, n) -> do
             void . fork $ do
                 let txOut = TxOut {
                     txOutAddress = makePubKeyAddress (toPublic key),
@@ -136,7 +137,9 @@ runCmd sendActions (SendToAllGenesis amount delay_ tpsSentFile) = do
                     submitTx
                         sendActions
                         (fakeSigner key)
-                        na
+                        (case sendMode of
+                            SendNeighbours -> na
+                            SendRoundRobin -> [na !! (n `mod` nNeighbours)])
                         (NE.fromList [TxOutAux txOut []])
                 case etx of
                     Left err -> addTxFailed tpsMVar >> putText (sformat ("Error: "%stext) err)
