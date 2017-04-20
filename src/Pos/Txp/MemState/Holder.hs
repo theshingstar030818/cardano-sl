@@ -31,3 +31,4 @@ mkTxpLocalData uv initTip = TxpLocalData
     <*> liftIO (STM.newTVarIO mempty)
     <*> liftIO (STM.newTVarIO initTip)
     <*> liftIO (STM.newTVarIO def)
+    <*> liftIO (STM.newTVarIO $ const $ return ())

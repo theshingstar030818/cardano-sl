@@ -439,7 +439,9 @@ library
                       , directory
                       , dlist
                       , ed25519
-                      , ether >= 0.5
+                      , ekg
+                      , ekg-core
+                      , ether
                       , exceptions
                       , file-embed >= 0.0.10
                       , filelock >= 0.1.0.1

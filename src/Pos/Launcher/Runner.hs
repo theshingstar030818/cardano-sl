@@ -29,6 +29,7 @@ import           Control.Lens                 (each, to, _tail)
 import           Control.Monad.Fix            (MonadFix)
 import           Data.Default                 (def)
 import           Data.Tagged                  (Tagged (..), untag)
+import           Data.Text                    (pack)
 import qualified Data.Time                    as Time
 import qualified Ether
 import           Formatting                   (build, sformat, shown, (%))
@@ -44,7 +45,9 @@ import           Node                         (Node, NodeAction (..),
                                                node, simpleNodeEndPoint, noReceiveDelay)
 import           Node.Util.Monitor            (startMonitor, stopMonitor)
 import qualified STMContainers.Map            as SM
+import qualified System.Metrics.Gauge         as Gauge
 import           System.Random                (newStdGen)
+import           System.Remote.Monitoring     (getGauge)
 import           System.Wlog                  (LoggerConfig (..), WithLogger, logError,
                                                logInfo, productionB, releaseAllHandlers,
                                                setupLogging, usingLoggerName)
@@ -99,7 +102,7 @@ import           Pos.Wallet.WalletMode        (runBlockchainInfoRedirect,
 #ifdef WITH_EXPLORER
 import           Pos.Explorer                 (explorerTxpGlobalSettings)
 #else
-import           Pos.Txp                      (txpGlobalSettings)
+import           Pos.Txp                      (txpGlobalSettings, txpSetGauge)
 #endif
 import           Pos.Update.Context           (UpdateContext (..))
 import qualified Pos.Update.DB                as GState
@@ -172,8 +175,12 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
 
         let startMonitoring node' = case lpEkgPort of
                 Nothing   -> return Nothing
-                Just port -> Just <$> startMonitor port runIO node'
-
+                Just port -> Just <$> do 
+                     server <- startMonitor port runIO node'
+                     gauge <- liftIO $ getGauge (pack "MemPoolSize") server
+                     atomically $ writeTVar (txpSetGauge txpVar) $ Gauge.set gauge . fromIntegral
+                     return server
+ 
         let stopMonitoring it = whenJust it stopMonitor
 
         sscState <-
