@@ -107,7 +107,7 @@ import           Pos.Txp                      (txpGlobalSettings, txpSetGauge)
 import           Pos.Update.Context           (UpdateContext (..))
 import qualified Pos.Update.DB                as GState
 import           Pos.Update.MemState          (newMemVar)
-import           Pos.Util.JsonLog             (JLFile (..))
+import           Pos.Util.JsonLog             (JLFile (..), jlLog, JLEvent (JLMemPoolSize))
 import           Pos.Util.UserSecret          (usKeys)
 import           Pos.Worker                   (allWorkersCount)
 import           Pos.WorkMode                 (ProductionMode, RawRealMode, ServiceMode,
@@ -178,7 +178,9 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
                 Just port -> Just <$> do 
                      server <- startMonitor port runIO node'
                      gauge <- liftIO $ getGauge (pack "MemPoolSize") server
-                     atomically $ writeTVar (txpSetGauge txpVar) $ Gauge.set gauge . fromIntegral
+                     atomically $ writeTVar (txpSetGauge txpVar) $ \n -> do
+                         Gauge.set gauge $ fromIntegral n
+                         runIO $ jlLog $ JLMemPoolSize n
                      return server
  
         let stopMonitoring it = whenJust it stopMonitor
