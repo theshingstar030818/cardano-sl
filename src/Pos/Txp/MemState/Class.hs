@@ -27,6 +27,7 @@ import qualified Control.Concurrent.STM as STM
 import           Data.Default           (Default (def))
 import qualified Data.HashMap.Strict    as HM
 import qualified Ether
+import           System.IO.Unsafe       (unsafePerformIO)
 
 import           Pos.Txp.Core.Types     (TxAux, TxId, TxOutAux)
 import           Pos.Txp.MemState.Types (GenericTxpLocalData (..),
@@ -75,21 +76,25 @@ getMemPool = getTxpLocalData (STM.readTVar . txpMemPool)
 getTxpExtra :: (MonadIO m, MonadTxpMem e m) => m e
 getTxpExtra = getTxpLocalData (STM.readTVar . txpExtra)
 
-txpLocalDataLock :: IO (TVar Bool)
-txpLocalDataLock = STM.newTVarIO True
+txpLocalDataLock :: TVar Bool
+txpLocalDataLock = unsafePerformIO $ STM.newTVarIO True
 {-# NOINLINE txpLocalDataLock #-}
+
+withLocalDataLock :: STM.STM a -> STM.STM a
+withLocalDataLock m = do
+  STM.readTVar txpLocalDataLock >>= \case
+    False -> STM.retry
+    True -> STM.writeTVar txpLocalDataLock False
+  r <- m
+  STM.writeTVar txpLocalDataLock True
+  pure r
 
 modifyTxpLocalData
     :: (MonadIO m, MonadTxpMem ext m)
     => (GenericTxpLocalDataPure ext -> (a, GenericTxpLocalDataPure ext)) -> m a
 modifyTxpLocalData f =
     askTxpMem >>= \TxpLocalData{..} -> do
-        lock <- liftIO txpLocalDataLock
-        atomically $
-            STM.readTVar lock >>= \case
-                False -> STM.retry
-                True -> STM.writeTVar lock False
-        (res, setGaugeIO) <- atomically $ do
+        (res, setGaugeIO) <- atomically . withLocalDataLock $ do
             curUM  <- STM.readTVar txpUtxoModifier
             curMP  <- STM.readTVar txpMemPool
             curUndos <- STM.readTVar txpUndos
@@ -104,7 +109,6 @@ modifyTxpLocalData f =
             STM.writeTVar txpExtra newExtra
             setGauge <- STM.readTVar txpSetGauge
             pure (res, setGauge $ _mpLocalTxsSize newMP)
-        atomically $ STM.writeTVar lock True
         liftIO setGaugeIO
         pure res
 
