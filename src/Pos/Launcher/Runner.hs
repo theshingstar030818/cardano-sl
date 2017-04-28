@@ -67,6 +67,7 @@ import           Pos.Context                  (BlkSemaphore (..), ConnectedPeers
                                                NodeContext (..), StartTime (..))
 import           Pos.Core                     (Timestamp ())
 import           Pos.Crypto                   (createProxySecretKey, encToPublic)
+import           Pos.Crypto.Random           (randomNumber)
 import           Pos.DB                       (MonadDB, NodeDBs)
 import           Pos.DB.DB                    (initNodeDBs, openNodeDBs)
 import           Pos.DB.DB                    (runDbCoreRedirect)
@@ -175,15 +176,17 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
 
         let startMonitoring node' = case lpEkgPort of
                 Nothing   -> return Nothing
-                Just port -> Just <$> do 
+                Just port -> Just <$> do
                      server <- startMonitor port runIO node'
                      gauge <- liftIO $ getGauge (pack "MemPoolSize") server
                      atomically $ writeTVar (txpSetGauge txpVar) $ \n -> do
                          Gauge.set gauge $ fromIntegral n
-                         runIO $ jlLog $ JLMemPoolSize n
+                         r <- randomNumber 20
+                         when (r == 0) (runIO $ jlLog $ JLMemPoolSize n)
                      return server
  
         let stopMonitoring it = whenJust it stopMonitor
+
 
         sscState <-
            runCH @ssc allWorkersNum np initNC modernDBs .
