@@ -3,6 +3,7 @@
 {-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TemplateHaskell     #-}
 
 module Pos.Communication.Relay.Logic
        ( Relay (..)
@@ -22,14 +23,18 @@ module Pos.Communication.Relay.Logic
        , handleDataL
 
        , invReqDataFlow
+       , invReqDataFlowWithLog
        , invReqDataFlowNeighbors
+       , InvReqDataFlowLog (..)
        ) where
 
 import           Control.Concurrent.STM             (isFullTBQueue, readTBQueue,
                                                      writeTBQueue)
+import           Data.Aeson.TH                      (deriveJSON, defaultOptions)
 import           Formatting                         (build, sformat, shown, stext, (%))
 import           Mockable                           (Mockable, MonadMockable, Throw,
-                                                     handleAll, throw, throw)
+                                                     handleAll, throw, throw, 
+                                                     CurrentTime, currentTime)
 import           Node.Message                       (Message)
 import           Paths_cardano_sl_infra             (version)
 import           Serokell.Util.Text                 (listJson)
@@ -360,6 +365,24 @@ relayWorkers allOutSpecs =
 -- Helpers for Communication.Methods
 ----------------------------------------------------------------------------
 
+data InvReqDataFlowLog = 
+      InvReqAccepted
+        { invReqStart    :: !Integer
+        , invReqReceived :: !Integer
+        , invReqSent     :: !Integer
+        }
+    | InvReqRejected
+        { invReqStart    :: !Integer
+        , invReqReceived :: !Integer
+        }
+    | InvReqException !Text
+    deriving Show
+
+$(deriveJSON defaultOptions ''InvReqDataFlowLog)
+
+currentTime' :: Mockable CurrentTime m => m Integer
+currentTime' = fromIntegral <$> currentTime
+
 invReqDataFlowNeighbors
     :: forall tag id contents m.
        ( Message (InvOrData tag id contents)
@@ -378,12 +401,13 @@ invReqDataFlowNeighbors
     => Text -> SendActions m -> tag -> id -> contents -> m ()
 invReqDataFlowNeighbors what sendActions tag id dt = handleAll handleE $
     reifyMsgLimit (Proxy @(ReqMsg id tag)) $ \lim -> do
-        converseToNeighbors sendActions (pure . Conversation . invReqDataFlowDo what tag id dt lim)
+        converseToNeighbors sendActions $ \peer -> pure $ Conversation $ \cactions ->
+            void $ invReqDataFlowDo what tag id dt lim peer cactions
   where
     handleE e = logWarning $
         sformat ("Error sending "%stext%", id = "%build%" to neighbors: "%shown) what id e
 
-invReqDataFlow
+invReqDataFlowWithLog
     :: forall tag id contents m.
        ( Message (InvOrData tag id contents)
        , Message (ReqMsg id tag)
@@ -395,13 +419,28 @@ invReqDataFlow
        , Bi (InvOrData tag id contents)
        , Bi (ReqMsg id tag)
        )
-    => Text -> SendActions m -> NodeId -> tag -> id -> contents -> m ()
-invReqDataFlow what sendActions addr tag id dt = handleAll handleE $
+    => Text -> SendActions m -> NodeId -> tag -> id -> contents -> m InvReqDataFlowLog
+invReqDataFlowWithLog what sendActions addr tag id dt = handleAll handleE $
     reifyMsgLimit (Proxy @(ReqMsg id tag)) $ \lim ->
         withConnectionTo sendActions addr (const (pure $ Conversation $ invReqDataFlowDo what tag id dt lim addr))
   where
-    handleE e = logWarning $
-        sformat ("Error sending "%stext%", id = "%build%" to "%shown%": "%shown) what id addr e
+    handleE e = do 
+        logWarning $
+            sformat ("Error sending "%stext%", id = "%build%" to "%shown%": "%shown) what id addr e
+        return $ InvReqException $ sformat build e
+
+invReqDataFlow
+    :: forall tag id contents m.
+    ( Message (InvOrData tag id contents)
+    , Message (ReqMsg id tag)
+    , Buildable id
+    , MinRelayWorkMode m
+    , MonadDBLimits m
+    , Bi tag, Bi id
+    , Bi (InvOrData tag id contents)
+    , Bi (ReqMsg id tag))
+    => Text -> SendActions m -> NodeId -> tag -> id -> contents -> m ()
+invReqDataFlow = (((((void <$>) <$>) <$>) <$>) <$>) <$> invReqDataFlowWithLog
 
 invReqDataFlowDo
     :: ( Message (InvOrData tag id contents)
@@ -421,12 +460,29 @@ invReqDataFlowDo
     -> Proxy s
     -> NodeId
     -> ConversationActions (InvOrData tag id contents) (LimitedLength s (ReqMsg id tag)) m
-    -> m ()
+    -> m InvReqDataFlowLog
 invReqDataFlowDo what tag id dt _ nodeId conv = do
+    startTS <- currentTime'
     send conv $ Left $ InvMsg tag id
-    recvLimited conv >>= maybe handleD replyWithData
+    mreply <- recvLimited conv
+    receivedTS <- currentTime'
+    case mreply of
+        Just reply -> replyWithData startTS receivedTS reply
+        Nothing    -> handleD startTS receivedTS
   where
-    replyWithData (ReqMsg _ _) = send conv $ Right $ DataMsg dt
-    handleD = logDebug $
-        sformat ("InvReqDataFlow ("%stext%"): "%shown %" closed conversation on \
-                 \Inv id = "%build) what nodeId id
+    replyWithData startTS receivedTS (ReqMsg _ _) = do 
+        send conv $ Right $ DataMsg dt
+        sentTS <- currentTime'
+        return InvReqAccepted
+            { invReqStart    = startTS
+            , invReqReceived = receivedTS
+            , invReqSent     = sentTS
+            }
+    handleD startTS receivedTS = do
+        logDebug $
+            sformat ("InvReqDataFlow ("%stext%"): "%shown %" closed conversation on \
+                     \Inv id = "%build) what nodeId id
+        return InvReqRejected
+            { invReqStart    = startTS
+            , invReqReceived = receivedTS
+            }
