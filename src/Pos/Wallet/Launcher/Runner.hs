@@ -23,6 +23,7 @@ import           Pos.Launcher                (BaseParams (..), LoggingParams (..
                                               runServer_)
 import           Pos.Reporting.MemState      (ReportingContext, emptyReportingContext)
 import           Pos.Ssc.GodTossing          (SscGodTossing)
+import           Pos.Util.JsonLog            (usingJsonLogFilePath)
 import           Pos.Util.Util               ()
 import           Pos.Wallet.KeyStorage       (KeyData, keyDataFromFile)
 import           Pos.Wallet.Launcher.Param   (WalletParams (..))
@@ -89,9 +90,8 @@ runRawStaticPeersWallet
     -> ListenersWithOut WalletStaticPeersMode
     -> (ActionSpec WalletStaticPeersMode a, OutSpecs)
     -> Production a
-runRawStaticPeersWallet transport peers WalletParams {..}
-                        listeners (ActionSpec action, outs) =
-    usingLoggerName lpRunnerTag . bracket openDB closeDB $ \db -> do
+runRawStaticPeersWallet transport peers WalletParams {..} listeners (ActionSpec action, outs) =
+    usingJsonLogFilePath wpJLFilePath . usingLoggerName lpRunnerTag . bracket openDB closeDB $ \db -> do
         stateM <- liftIO SM.newIO
         keyData <- keyDataFromFile wpKeyFilePath
         flip Ether.runReadersT

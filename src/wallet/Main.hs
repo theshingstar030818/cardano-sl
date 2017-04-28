@@ -368,6 +368,7 @@ main = do
                                            (CLI.richPoorDistr woCommonArgs)
                                            (CLI.expDistr woCommonArgs)
                           else genesisStakeDistribution
+                , wpJLFilePath = woJLFile
                 }
 
             plugins :: ([ WorkerSpec WalletStaticPeersMode ], OutSpecs)

@@ -27,6 +27,7 @@ import           Pos.Reporting.MemState        (ReportingContext, emptyReporting
 import           Pos.Ssc.Class                 (SscHelpersClass)
 import           Pos.Wallet.KeyStorage         (KeyData)
 import           Pos.Wallet.State              (getWalletState)
+import           Pos.Util.JsonLog              (usingJsonLogFilePath)
 import qualified Pos.Wallet.State              as WS
 import           Pos.Wallet.State.Limits       (runDbLimitsWalletRedirect)
 import           Pos.Wallet.WalletMode         (WalletStaticPeersMode,
@@ -83,6 +84,7 @@ convertHandler
 convertHandler mws kd ws wsConn peers handler = do
     stateM <- liftIO SM.newIO
     liftIO ( runProduction
+           . usingJsonLogFilePath Nothing
            . usingLoggerName "wallet-lite-api"
            . flip Ether.runReadersT
                 ( Tagged @PeerStateTag stateM

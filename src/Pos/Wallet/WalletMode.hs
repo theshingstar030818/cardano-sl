@@ -64,6 +64,7 @@ import           Pos.Types                    (BlockHeader, ChainDifficulty, dif
                                                flattenEpochOrSlot, flattenSlotId)
 import           Pos.Update                   (ConfirmedProposalState (..))
 import           Pos.Update.Context           (UpdateContext (ucUpdateSemaphore))
+import           Pos.Util.JsonLog             (JLFile)
 import           Pos.Util                     (maybeThrow)
 import           Pos.Wallet.KeyStorage        (KeyData, MonadKeys)
 import qualified Pos.Wallet.State             as WS
@@ -278,6 +279,7 @@ type WalletMode ssc m
       , MonadUpdates m
       , WithPeerState m
       , MonadDiscovery m
+      , Ether.MonadReader' JLFile m
       )
 
 ---------------------------------------------------------------
@@ -298,6 +300,7 @@ type RawWalletMode =
         , Tagged ReportingContext ReportingContext
         ) (
     LoggerNameBox (
+    Ether.ReaderT' JLFile
     Production
     ))))))))
 

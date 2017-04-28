@@ -15,6 +15,7 @@ module Pos.Util.JsonLog
        , appendJL
        , fromJLSlotId
        , JLFile(..)
+       , usingJsonLogFilePath
        ) where
 
 import           Control.Concurrent.MVar (withMVar)
@@ -114,3 +115,16 @@ jlLog ev = do
         (liftIO . withMVar logFileMV $ flip appendJL ev)
         `catchAll` \e ->
             logWarning $ sformat ("Can't write to json log: "%shown) e
+       
+usingJsonLogFilePath
+    :: ( MonadIO m )
+    => Maybe FilePath
+    -> Ether.ReaderT' JLFile m a
+    -> m a
+usingJsonLogFilePath mPath act = do
+    jlFile <- JLFile <$> case mPath of
+        Nothing -> return Nothing
+        Just path -> do
+            mvar <- liftIO $ newMVar path
+            return $ Just mvar
+    Ether.runReaderT' act jlFile
