@@ -5,6 +5,7 @@
 
 module Main where
 
+import           Control.Concurrent.STM.TQueue (newTQueue, writeTQueue, tryReadTQueue)
 import           Control.Monad.Error.Class  (throwError)
 import           Control.Monad.Reader       (MonadReader (..), ReaderT, ask, runReaderT)
 import           Control.Monad.Trans.Either (EitherT (..))
@@ -21,7 +22,7 @@ import           Formatting                 (build, int, sformat, shown, stext, 
 import           Mockable                   (Mockable, SharedAtomic, SharedAtomicT,
                                              currentTime, delay, Production,
                                              modifySharedAtomic, newSharedAtomic,
-                                             race, fork)
+                                             race, fork, forConcurrently)
 import           Network.Transport.Abstract (Transport, hoistTransport)
 import           Options.Applicative        (execParser)
 import           System.IO                  (BufferMode (LineBuffering),
@@ -31,7 +32,7 @@ import           System.Wlog                (logDebug, logError, logInfo, logWar
 import           System.Exit                (ExitCode (ExitSuccess))
 import           System.Posix.Process       (exitImmediately)
 #endif
-import           Serokell.Util              (ms, sec)
+import           Serokell.Util              (sec)
 import           Universum
 
 import           Pos.Binary                 (Raw)
@@ -108,7 +109,7 @@ runCmd sendActions (Send idx outputs) = do
     case etx of
         Left err -> putText $ sformat ("Error: "%stext) err
         Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
-runCmd sendActions (SendToAllGenesis amount delay_ sendMode tpsSentFile) = do
+runCmd sendActions (SendToAllGenesis amount conc sendMode tpsSentFile) = do
     (skeys, na) <- ask
     let nNeighbours = length na
     let slotDuration = fromIntegral (toMicroseconds genesisSlotDuration) `div` 1000000 :: Int
@@ -118,9 +119,21 @@ runCmd sendActions (SendToAllGenesis amount delay_ sendMode tpsSentFile) = do
     liftIO $ hSetBuffering h LineBuffering
     liftIO . T.hPutStrLn h $ T.intercalate "," [ "slotDuration=" <> (T.pack . show) slotDuration
                                                , "sendMode=" <> (T.pack . show) sendMode
-                                               , "delay=" <> (T.pack . show) delay_
+                                               , "conc=" <> (T.pack . show) conc
                                                , "startTime=" <> startTime]
     liftIO $ T.hPutStrLn h "time,txCount,txType"
+    txQueue <- liftIO . atomically $ newTQueue
+    forM_ (zip skeys [0..]) $ \(key, n) -> do
+        let txOut = TxOut {
+                txOutAddress = makePubKeyAddress (toPublic key),
+                txOutValue = amount
+                }
+        let neighbours = case sendMode of
+                SendNeighbours -> na
+                SendRoundRobin -> [na !! (n `mod` nNeighbours)]
+        liftIO . atomically $ writeTQueue txQueue (key, txOut, neighbours)
+
+
     let writeTPS :: CmdRunner m void
         -- every 20 seconds, write the number of sent and failed transactions to a CSV file.
         writeTPS = do
@@ -135,15 +148,8 @@ runCmd sendActions (SendToAllGenesis amount delay_ sendMode tpsSentFile) = do
                 return (TxCount 0 0, ())
             writeTPS
     let sendTxs :: CmdRunner m ()
-        sendTxs = forM_ (zip skeys [0..]) $ \(key, n) -> do
-            void . fork $ do
-                let txOut = TxOut {
-                    txOutAddress = makePubKeyAddress (toPublic key),
-                    txOutValue = amount
-                }
-                let neighbours = case sendMode of
-                        SendNeighbours -> na
-                        SendRoundRobin -> [na !! (n `mod` nNeighbours)]
+        sendTxs = (liftIO . atomically $ tryReadTQueue txQueue) >>= \case
+            Just (key, txOut, neighbours) -> do
                 etx <-
                     lift $
                     submitTx
@@ -154,9 +160,11 @@ runCmd sendActions (SendToAllGenesis amount delay_ sendMode tpsSentFile) = do
                 case etx of
                     Left err -> addTxFailed tpsMVar >> logError (sformat ("Error: "%stext%" while trying to send to "%shown) err neighbours)
                     Right tx -> addTxSubmit tpsMVar >> logInfo (sformat ("Submitted transaction: "%txaF%" to "%shown) tx neighbours)
-            delay $ ms delay_
+                sendTxs
+            Nothing -> return ()
     putStr $ unwords ["Sending", show (length skeys), "transactions"]
-    either absurd identity <$> race writeTPS sendTxs
+    let sendTxsConcurrently = void $ forConcurrently [1..conc] (const sendTxs)
+    either absurd identity <$> race writeTPS sendTxsConcurrently
     liftIO $ hClose h
 runCmd sendActions v@(Vote idx decision upid) = do
     logDebug $ "Submitting a vote :" <> show v

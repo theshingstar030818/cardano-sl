@@ -31,12 +31,6 @@ module Pos.Communication.Types.Protocol
        , N.NodeId
        ) where
 
-<<<<<<< 0760440087a441eb0e50bc84e898f840a091bf0c
-=======
-import qualified Control.Monad         as Monad (fail)
-import           Control.Arrow         ((&&&))
-import           Data.Hashable         (Hashable)
->>>>>>> PeerId parser fail message, option help message
 import qualified Data.HashMap.Strict   as HM
 import qualified Data.Text.Buildable   as B
 import qualified Data.ByteString       as BS (length)
