@@ -22,7 +22,7 @@ import           Formatting                 (build, int, sformat, shown, stext, 
 import           Mockable                   (Mockable, SharedAtomic, SharedAtomicT,
                                              currentTime, delay, Production,
                                              modifySharedAtomic, newSharedAtomic,
-                                             race, fork, forConcurrently)
+                                             race, forConcurrently)
 import           Network.Transport.Abstract (Transport, hoistTransport)
 import           Options.Applicative        (execParser)
 import           System.IO                  (BufferMode (LineBuffering),

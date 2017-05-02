@@ -24,7 +24,7 @@ import           Pos.Txp.Network.Types      (TxMsgContents (..), TxMsgTag (..))
 import           Pos.Update                 (ProposalMsgTag (..), UpId, UpdateProposal,
                                              UpdateVote, VoteMsgTag (..), mkVoteId)
 import           Pos.WorkMode.Class         (MinWorkMode)
-import           Pos.Util.JsonLog           (MonadJL, JLEvent (..), JLTx (..),
+import           Pos.Util.JsonLog           (MonadJL, JLEvent (..), JLTxS (..),
                                              jlLog)
 
 
@@ -34,10 +34,10 @@ sendTx
     => SendActions m -> NodeId -> TxAux -> m ()
 sendTx sendActions addr (tx,w,d) = do
     lg <- invReqDataFlowWithLog "tx" sendActions addr TxMsgTag (hash tx) (TxMsgContents tx w d)
-    jlLog $ JLTxSent $ JLTx
-        { jlNodeId = sformat build addr
-        , jlTxId   = sformat build $ hash tx
-        , jlInvReq = lg
+    jlLog $ JLTxSent $ JLTxS
+        { jlsNodeId = sformat build addr
+        , jlsTxId   = sformat build $ hash tx
+        , jlsInvReq = lg
         }
 
 -- Send UpdateVote to given address.

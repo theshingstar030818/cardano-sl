@@ -32,6 +32,9 @@ import           Pos.Txp.MemState           (getMemPool)
 import           Pos.Txp.Network.Types      (TxMsgContents (..), TxMsgTag (..))
 import           Pos.Txp.Toil.Types         (MemPool (..))
 import           Pos.WorkMode.Class         (WorkMode)
+import           Pos.Util.JsonLog           (MonadJL, JLEvent (..), JLTxR (..),
+                                             jlLog)
+import           Pos.Util.TimeWarp          (currentTime)
 
 txProxy :: RelayProxy TxId TxMsgTag TxMsgContents
 txProxy = RelayProxy
@@ -74,19 +77,27 @@ handleTxDo
     :: WorkMode ssc m
     => (TxId, TxAux) -> m Bool
 handleTxDo tx = do
+    ts <- currentTime
 #ifdef WITH_EXPLORER
     res <- runExceptT $ eTxProcessTransaction tx
 #else
     res <- runExceptT $ txProcessTransaction tx
 #endif
     let txId = fst tx
+    let json me = jlLog $ JLTxReceived $ JLTxR
+            { jlrTxId     = sformat build txId
+            , jlrReceived = fromIntegral ts
+            , jlrError    = me
+            }
     case res of
         Right _ -> do
             statlogCountEvent StatProcessTx 1
             logInfo $
                 sformat ("Transaction has been added to storage: "%build) txId
+            json Nothing
             pure True
         Left er -> do
             logInfo $
                 sformat ("Transaction hasn't been added to storage: "%build%" , reason: "%build) txId er
+            json $ Just $ sformat build er
             pure False
