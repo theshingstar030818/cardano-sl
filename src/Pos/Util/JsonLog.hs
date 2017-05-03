@@ -25,10 +25,11 @@ import           Data.Aeson              (encode)
 import           Data.Aeson.TH           (deriveJSON)
 import qualified Data.ByteString.Lazy    as LBS
 import qualified Ether
-import           Formatting              (sformat, shown, (%))
-import           Mockable                (Catch, Mockable, catchAll)
+import           Formatting              (sformat)
+import           Mockable                (Catch, Mockable)
 import           Serokell.Aeson.Options  (defaultOptions)
-import           System.Wlog             (CanLog, HasLoggerName, logWarning)
+import           System.IO               (hClose)
+import           System.Wlog             (CanLog, HasLoggerName)
 import           Universum               hiding (catchAll)
 
 import           Pos.Binary.Block        ()
@@ -116,10 +117,26 @@ jlAdoptedBlock = JLAdoptedBlock . showHash . headerHash
 -- | Append event into log by given 'FilePath'.
 appendJL :: (MonadIO m) => FilePath -> JLEvent -> m ()
 appendJL path ev = liftIO $ do
-  time <- currentTime
-  LBS.appendFile path . encode $ JLTimedEvent (fromIntegral time) ev
+    tev <- mkTimedEvent ev
+    LBS.appendFile path tev 
 
-newtype JLFile = JLFile (Maybe (MVar FilePath))
+-- | Turn a Json log event into a ByteString with timestamp.
+mkTimedEvent :: MonadIO m => JLEvent -> m LBS.ByteString
+mkTimedEvent ev = do
+    time <- currentTime
+    return $ encode $ JLTimedEvent (fromIntegral time) ev
+
+-- | Note: not an ideal representation. One branch used
+--     Maybe (MVar FilePath)
+--   and another used
+--     Maybe (MVar Handle)
+--   so to make merging simpler they were unified.
+--
+--   If a FilePath is given, the file will be opened, written, and closed
+--   at each 'jlLog', whereas giving a handle allows the caller to control
+--   acquision and release, possibly holding the file open for the duration
+--   of the program.
+newtype JLFile = JLFile (Maybe (MVar (Either FilePath Handle)))
 
 -- | Monad for things that can log Json log events.
 type MonadJL m =
@@ -132,20 +149,19 @@ type MonadJL m =
 jlLog :: MonadJL m => JLEvent -> m ()
 jlLog ev = do
     JLFile jlFileM <- Ether.ask'
-    whenJust jlFileM $ \logFileMV ->
-        (liftIO . withMVar logFileMV $ flip appendJL ev)
-        `catchAll` \e ->
-            logWarning $ sformat ("Can't write to json log: "%shown) e
-       
+    whenJust jlFileM $ \logFileMV -> do
+        timed <- mkTimedEvent ev
+        liftIO $ withMVar logFileMV $ \choice -> case choice of
+            Left fp -> bracket (openFile fp WriteMode) hClose (flip LBS.hPut timed)
+            Right h -> LBS.hPut h timed
+
 usingJsonLogFilePath
-    :: ( MonadIO m )
+    :: ( MonadIO m, MonadMask m )
     => Maybe FilePath
     -> Ether.ReaderT' JLFile m a
     -> m a
-usingJsonLogFilePath mPath act = do
-    jlFile <- JLFile <$> case mPath of
-        Nothing -> return Nothing
-        Just path -> do
-            mvar <- liftIO $ newMVar path
-            return $ Just mvar
-    Ether.runReaderT' act jlFile
+usingJsonLogFilePath mPath act = case mPath of
+    Nothing   -> Ether.runReaderT' act (JLFile Nothing)
+    Just path -> bracket (openFile path WriteMode) (liftIO . hClose) $ \h -> do
+        hMV <- newMVar (Right h)
+        Ether.runReaderT' act (JLFile (Just hMV))

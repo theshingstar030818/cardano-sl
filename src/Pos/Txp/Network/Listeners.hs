@@ -32,8 +32,7 @@ import           Pos.Txp.MemState           (getMemPool)
 import           Pos.Txp.Network.Types      (TxMsgContents (..), TxMsgTag (..))
 import           Pos.Txp.Toil.Types         (MemPool (..))
 import           Pos.WorkMode.Class         (WorkMode)
-import           Pos.Util.JsonLog           (MonadJL, JLEvent (..), JLTxR (..),
-                                             jlLog)
+import           Pos.Util.JsonLog           (JLEvent (..), JLTxR (..), jlLog)
 import           Pos.Util.TimeWarp          (currentTime)
 
 txProxy :: RelayProxy TxId TxMsgTag TxMsgContents
