@@ -114,17 +114,14 @@ showHash = sformat hashHexF
 jlAdoptedBlock :: Ssc ssc => Block ssc -> JLEvent
 jlAdoptedBlock = JLAdoptedBlock . showHash . headerHash
 
--- | Append event into log by given 'FilePath'.
-appendJL :: (MonadIO m) => FilePath -> JLEvent -> m ()
-appendJL path ev = liftIO $ do
-    tev <- mkTimedEvent ev
-    LBS.appendFile path tev 
-
--- | Turn a Json log event into a ByteString with timestamp.
-mkTimedEvent :: MonadIO m => JLEvent -> m LBS.ByteString
-mkTimedEvent ev = do
+-- | Append event into log by given 'Handle'
+appendJL :: (MonadIO m) => JLFile -> JLEvent -> m ()
+appendJL (JLFile mMVar) ev = whenJust mMVar $ \v -> do
     time <- currentTime
-    return $ encode $ JLTimedEvent (fromIntegral time) ev
+    let codedEvent = encode $ JLTimedEvent (fromIntegral time) ev
+    liftIO $ withMVar v $ \choice -> case choice of
+        Left fp -> bracket (openFile fp WriteMode) hClose (flip LBS.hPut codedEvent)
+        Right h -> LBS.hPut h codedEvent
 
 -- | Note: not an ideal representation. One branch used
 --     Maybe (MVar FilePath)
@@ -147,13 +144,7 @@ type MonadJL m =
     , CanLog m )
 
 jlLog :: MonadJL m => JLEvent -> m ()
-jlLog ev = do
-    JLFile jlFileM <- Ether.ask'
-    whenJust jlFileM $ \logFileMV -> do
-        timed <- mkTimedEvent ev
-        liftIO $ withMVar logFileMV $ \choice -> case choice of
-            Left fp -> bracket (openFile fp WriteMode) hClose (flip LBS.hPut timed)
-            Right h -> LBS.hPut h timed
+jlLog ev = Ether.ask' >>= flip appendJL ev
 
 usingJsonLogFilePath
     :: ( MonadIO m, MonadMask m )

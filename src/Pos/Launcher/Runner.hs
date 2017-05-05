@@ -419,9 +419,9 @@ runCH allWorkersNum params@NodeParams {..} sscNodeContext db act = do
             , ncNodeParams = params
             , ncSendLock = Nothing
 #ifdef WITH_EXPLORER
-            , ncTxpGlobalSettings = explorerTxpGlobalSettings
+                , ncTxpGlobalSettings = explorerTxpGlobalSettings
 #else
-            , ncTxpGlobalSettings = txpGlobalSettings
+                , ncTxpGlobalSettings = txpGlobalSettings
 #endif
             , .. }
     Ether.runReadersT act ctx
