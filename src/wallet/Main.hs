@@ -57,7 +57,7 @@ import           Pos.Ssc.GodTossing         (SscGodTossing)
 import           Pos.Ssc.NistBeacon         (SscNistBeacon)
 import           Pos.Ssc.SscAlgo            (SscAlgo (..))
 import           Pos.Txp                    (TxOut (..), TxOutAux (..), txaF)
-import           Pos.Types                  (coinF, makePubKeyAddress, Timestamp (..))
+import           Pos.Types                  (coinF, makePubKeyAddress)
 import           Pos.Update                 (BlockVersionData (..), UpdateVote (..),
                                              mkUpdateProposalWSign, patakUpdateData,
                                              skovorodaUpdateData)
@@ -74,6 +74,7 @@ import           Pos.Wallet                 (WalletMode, WalletParams (..),
 import           Pos.Wallet.Web             (walletServeWebLite, walletServerOuts)
 #endif
 
+import           System.Random              (randomRIO)
 import           Command                    (Command (..), SendMode (..), parseCommand)
 import qualified Network.Transport.TCP      as TCP (TCPAddr (..))
 import           WalletOptions              (WalletAction (..), WalletOptions (..),
@@ -129,9 +130,13 @@ runCmd sendActions (SendToAllGenesis nTrans conc sendMode tpsSentFile) = do
                 txOutAddress = makePubKeyAddress (toPublic key),
                 txOutValue = mkCoin 1
                 }
-        let neighbours = case sendMode of
-                SendNeighbours -> na
-                SendRoundRobin -> [na !! (n `mod` nNeighbours)]
+        neighbours <- case sendMode of
+                SendNeighbours -> return na
+                SendRoundRobin -> return [na !! (n `mod` nNeighbours)]
+                SendRandom -> do
+                    i <- liftIO $ randomRIO (0, nNeighbours - 1)
+                    return [na !! i]
+
         liftIO . atomically $ writeTQueue txQueue (key, txOut, neighbours)
 
 
