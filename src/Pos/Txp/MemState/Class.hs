@@ -24,7 +24,7 @@ module Pos.Txp.MemState.Class
 import           Universum
 
 import qualified Control.Concurrent.STM as STM
-import           Data.Default           (Default (def))
+import           Data.Default           (Default (..))
 import qualified Data.HashMap.Strict    as HM
 import qualified Ether
 import           System.IO.Unsafe       (unsafePerformIO)
