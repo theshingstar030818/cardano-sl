@@ -42,7 +42,9 @@ import           Network.Transport.Concrete   (concrete)
 import qualified Network.Transport.TCP        as TCP
 import           Node                         (Node, NodeAction (..),
                                                defaultNodeEnvironment, hoistSendActions,
-                                               node, simpleNodeEndPoint, noReceiveDelay)
+                                               node, simpleNodeEndPoint,
+                                               NodeEndPoint, Statistics,
+                                               ReceiveDelay, noReceiveDelay)
 import           Node.Util.Monitor            (setupMonitor, stopMonitor)
 import qualified STMContainers.Map            as SM
 import           System.Random                (newStdGen)
@@ -212,6 +214,9 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
 
         let stopMonitoring it = whenJust it stopMonitor
 
+        let mkTransport = simpleNodeEndPoint transport
+        let mkReceiveDelay _ = return Nothing
+
         sscState <-
            runCH @ssc allWorkersNum np initNC modernDBs .
            flip Ether.runReadersT
@@ -242,7 +247,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
            runDbCoreRedirect .
            runUpdatesRedirect .
            runBlockchainInfoRedirect .
-           runServer transport listeners outSpecs startMonitoring stopMonitoring . ActionSpec $
+           runServer mkTransport mkReceiveDelay listeners outSpecs startMonitoring stopMonitoring . ActionSpec $
                \vI sa -> nodeStartMsg npBaseParams >> action vI sa
   where
     LoggingParams {..} = bpLoggingParams npBaseParams
@@ -271,14 +276,15 @@ runServiceMode transport bp@BaseParams {..} listeners outSpecs (ActionSpec actio
 
 runServer
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
-    => Transport m
+    => (m (Statistics m) -> NodeEndPoint m)
+    -> (m (Statistics m) -> ReceiveDelay m)
     -> m (ListenersWithOut m)
     -> OutSpecs
     -> (Node m -> m t)
     -> (t -> m ())
     -> ActionSpec m b
     -> m b
-runServer transport packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
+runServer mkTransport mkReceiveDelay packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
     packedLS  <- packedLS_M
     let (listeners', InSpecs ins, OutSpecs outs) = unpackLSpecs packedLS
         ourVerInfo =
@@ -286,7 +292,7 @@ runServer transport packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec a
         listeners = listeners' ourVerInfo
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo "%build) ourVerInfo
-    node (simpleNodeEndPoint transport) (const noReceiveDelay) stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
+    node mkTransport mkReceiveDelay stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
         -- CSL-831 TODO use __peerVerInfo
         NodeAction (\__peerVerInfo -> listeners) $ \sendActions -> do
             t <- withNode __node
@@ -296,7 +302,7 @@ runServer_
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
     => Transport m -> ListenersWithOut m -> OutSpecs -> ActionSpec m b -> m b
 runServer_ transport packedLS outSpecs =
-    runServer transport (pure packedLS) outSpecs acquire release
+    runServer (simpleNodeEndPoint transport) (const noReceiveDelay) (pure packedLS) outSpecs acquire release
   where
     acquire = const pass
     release = const pass
