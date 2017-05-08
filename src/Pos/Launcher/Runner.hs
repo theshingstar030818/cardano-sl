@@ -40,7 +40,8 @@ import           Network.Transport.Concrete  (concrete)
 import qualified Network.Transport.TCP       as TCP
 import           Node                        (Node, NodeAction (..),
                                               defaultNodeEnvironment, hoistSendActions,
-                                              node, simpleNodeEndPoint)
+                                              node, simpleNodeEndPoint,
+                                              noReceiveDelay)
 import           Node.Util.Monitor           (setupMonitor, stopMonitor)
 import qualified STMContainers.Map           as SM
 import           System.Random               (newStdGen)
@@ -202,7 +203,9 @@ runServer peerId transport packedLS_M (OutSpecs wouts) withNode afterNode (Actio
         listeners = listeners' ourVerInfo
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo "%build) ourVerInfo
-    node (simpleNodeEndPoint transport) stdGen BiP (peerId, ourVerInfo) defaultNodeEnvironment $ \__node ->
+    let mkTransport = simpleNodeEndPoint transport
+        mkReceiveDelay _ = noReceiveDelay 
+    node mkTransport mkReceiveDelay stdGen BiP (peerId, ourVerInfo) defaultNodeEnvironment $ \__node ->
         NodeAction listeners $ \sendActions -> do
             t <- withNode __node
             action ourVerInfo sendActions `finally` afterNode t
