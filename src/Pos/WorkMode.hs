@@ -38,7 +38,7 @@ import           Pos.Slotting.MemState.Holder (SlotsDataRedirect)
 import           Pos.Slotting.Ntp             (NtpSlottingVar, SlotsRedirect)
 import           Pos.Ssc.Extra                (SscMemTag, SscState)
 import           Pos.Statistics.MonadStats    (NoStatsT, StatsT)
-import           Pos.Txp.MemState             (GenericTxpLocalData, TxpHolderTag)
+import           Pos.Txp.MemState             (GenericTxpLocalData, TxpHolderTag, TxpMetrics)
 import           Pos.Update.DB                (DbLimitsRedirect)
 import           Pos.Wallet.WalletMode        (BlockchainInfoRedirect, UpdatesRedirect)
 import           Pos.WorkMode.Class           (MinWorkMode, TxpExtra_TMP, WorkMode)
@@ -64,7 +64,7 @@ type RawRealMode ssc =
         , Tagged SlottingVar SlottingVar
         , Tagged (Bool, NtpSlottingVar) (Bool, NtpSlottingVar)
         , Tagged SscMemTag (SscState ssc)
-        , Tagged TxpHolderTag (GenericTxpLocalData TxpExtra_TMP)
+        , Tagged TxpHolderTag (GenericTxpLocalData TxpExtra_TMP, TxpMetrics)
         , Tagged (TVar DelegationWrap) (TVar DelegationWrap)
         , Tagged PeerStateTag (PeerStateCtx Production)
         ) (

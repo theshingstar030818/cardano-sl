@@ -45,7 +45,7 @@ import           Pos.Slotting                  (NtpSlottingVar, SlottingVar,
 import           Pos.Ssc.Class                 (SscConstraint)
 import           Pos.Ssc.Extra                 (SscMemTag, SscState)
 import           Pos.Txp                       (GenericTxpLocalData, TxpHolderTag,
-                                                askTxpMem)
+                                                askTxpMem, ignoreTxpMetrics)
 import           Pos.Update.DB                 (runDbLimitsRedirect)
 import           Pos.Wallet.KeyStorage         (addSecretKey)
 import           Pos.Wallet.WalletMode         (runBlockchainInfoRedirect,
@@ -123,7 +123,7 @@ convertHandler nc modernDBs tlw ssc ws delWrap psCtx
                    , Tagged @SlottingVar slotVar
                    , Tagged @(Bool, NtpSlottingVar) ntpSlotVar
                    , Tagged @SscMemTag ssc
-                   , Tagged @TxpHolderTag tlw
+                   , Tagged @TxpHolderTag (tlw, ignoreTxpMetrics)
                    , Tagged @(TVar DelegationWrap) delWrap
                    , Tagged @PeerStateTag peerStateCtx
                    ))
