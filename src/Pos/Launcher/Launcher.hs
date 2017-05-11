@@ -49,4 +49,4 @@ runNodeStats
     -> SscParams ssc
     -> Production ()
 runNodeStats transport kinst plugins np sscnp =
-    runStatsMode peerId transport kinst np sscnp (runNode @ssc (Just kinst) plugins)
+    runStatsMode transport kinst np sscnp (runNode @ssc (Just kinst) plugins)
