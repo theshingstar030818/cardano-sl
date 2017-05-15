@@ -41,7 +41,6 @@ import           Pos.Util                    (logWarningSWaitLinear, mconcatPair
 import           Pos.Util.JsonLog            (jlCreatedBlock, jlLog)
 import           Pos.Util.LogSafe            (logDebugS, logInfoS, logNoticeS,
                                               logWarningS)
-
 import           Pos.WorkMode.Class          (WorkMode)
 
 -- | All workers specific to block processing.
