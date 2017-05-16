@@ -69,7 +69,6 @@ import           Pos.Core                     (Timestamp ())
 import           Pos.Crypto                   (createProxySecretKey, encToPublic)
 import qualified System.Remote.Monitoring     as Monitoring
 import qualified System.Metrics               as Metrics
-import qualified System.Metrics.Distribution  as Metrics.Distr
 import qualified System.Metrics.Gauge         as Metrics.Gauge
 import           Pos.DB                       (MonadDB, NodeDBs)
 import           Pos.DB.DB                    (initNodeDBs, openNodeDBs)
@@ -157,24 +156,39 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
         -- gauge and distribution can be sampled by the server dispatcher
         -- and used to inform a policy for delaying the next receive event.
         --
-        -- TODO implement this. Requires time-warp-nt commit
-        --   275c16b38a715264b0b12f32c2f22ab478db29e9
-        -- in addition to the non-master
-        --   fdef06b1ace22e9d91c5a81f7902eb5d4b6eb44f
-        -- for flexible EKG setup.
         ekgStore <- liftIO $ Metrics.newStore
-        ekgMemPoolGauge <- liftIO $ Metrics.createGauge (pack "MemPoolSize") ekgStore
-        ekgMemPoolDistr <- liftIO $ Metrics.createDistribution (pack "MemPoolTime") ekgStore
+        ekgMemPoolSize <- liftIO $ Metrics.createGauge (pack "MemPoolSize") ekgStore
+        ekgMemPoolWaitTime <- liftIO $ Metrics.createGauge (pack "MemPoolWaitTime") ekgStore
+        ekgMemPoolModifyTime <- liftIO $ Metrics.createGauge (pack "MemPoolModifyTime") ekgStore
+        ekgMemPoolQueueLength <- liftIO $ Metrics.createGauge (pack "MemPoolQueueLength") ekgStore
 
-        let txpMetrics = TxpMetrics
-                { txpMetricsMemPoolSize =
-                      ( fromIntegral <$> Metrics.Gauge.read ekgMemPoolGauge
-                      , Metrics.Gauge.set ekgMemPoolGauge . fromIntegral
-                      )
-                , txpMetricsModifyTime =
-                      ( round . Metrics.Distr.mean <$> Metrics.Distr.read ekgMemPoolDistr
-                      , Metrics.Distr.add ekgMemPoolDistr . fromIntegral
-                      )
+        -- An exponential moving average is used for the time gauges (wait
+        -- and modify durations). The parameter alpha is chosen somewhat
+        -- arbitrarily.
+        -- FIXME take alpha from configuration/CLI, or use a better
+        -- estimator.
+        let alpha :: Double
+            alpha = 0.75
+            txpMetrics = TxpMetrics
+                { txpMetricsWait = Metrics.Gauge.inc ekgMemPoolQueueLength
+
+                , txpMetricsAcquire = \timeWaited -> do
+                      Metrics.Gauge.dec ekgMemPoolQueueLength
+                      timeWaited' <- Metrics.Gauge.read ekgMemPoolWaitTime
+                      -- Assume a 0-value estimate means we haven't taken
+                      -- any samples yet.
+                      let new = if timeWaited' == 0
+                                then fromIntegral timeWaited
+                                else round $ alpha * fromIntegral timeWaited + (1 - alpha) * fromIntegral timeWaited'
+                      Metrics.Gauge.set ekgMemPoolWaitTime new
+
+                , txpMetricsRelease = \timeElapsed memPoolSize -> do
+                      Metrics.Gauge.set ekgMemPoolSize (fromIntegral memPoolSize)
+                      timeElapsed' <- Metrics.Gauge.read ekgMemPoolModifyTime
+                      let new = if timeElapsed' == 0
+                                then fromIntegral timeElapsed
+                                else round $ alpha * fromIntegral timeElapsed + (1 - alpha) * fromIntegral timeElapsed'
+                      Metrics.Gauge.set ekgMemPoolModifyTime new
                 }
 
         -- TODO [CSL-775] need an effect-free way of running this into IO.
@@ -216,7 +230,25 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
         let stopMonitoring it = whenJust it stopMonitor
 
         let mkTransport = simpleNodeEndPoint transport
-        let mkReceiveDelay _ = return Nothing
+
+        -- TODO have the receive delay for the dispatcher thread grow as
+        -- the mempool queue length grows.
+        -- The mempool queue will clear without any need to draw more data
+        -- from the network, so it should be ok to do this.
+        -- It might look something like this:
+        {-
+        let mkReceiveDelay _ = do
+                qlength <- liftIO $ Metrics.Gauge.read ekgMemPoolQueueLength
+                waitTime <- liftIO $ Metrics.Gauge.read ekgMemPoolWaitTime
+                let expectedWait = qlength * waitTime
+                if expectedWait < 100
+                then return Nothing
+                else do
+                    let actualDelay = fromIntegral expectedWait
+                    logDebug $ sformat ("delaying network input for "%shown) actualDelay
+                    return $ Just actualDelay
+        -}
+        let mkReceiveDelay _ = pure Nothing
 
         sscState <-
            runCH @ssc allWorkersNum np initNC modernDBs .
