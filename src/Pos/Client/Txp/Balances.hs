@@ -30,6 +30,7 @@ import           Pos.Txp                      (GenericToilModifier (..), MonadTx
 import           Pos.Types                    (Address (..), Coin, mkCoin, sumCoins,
                                                unsafeIntegerToCoin)
 import qualified Pos.Util.Modifier            as MM
+import           Pos.Util.JsonLog             (MonadJL)
 
 -- | A class which have the methods to get state of address' balance
 class Monad m => MonadBalances m where
@@ -62,9 +63,10 @@ runBalancesRedirect :: BalancesRedirect m a -> m a
 runBalancesRedirect = coerce
 
 instance
-    (MonadDB m, MonadMask m, WithLogger m, MonadTxpMem ext m, t ~ IdentityT) =>
+    (MonadDB m, MonadMask m, MonadJL m, WithLogger m, MonadTxpMem ext m, t ~ IdentityT) =>
         MonadBalances (Ether.TaggedTrans BalancesRedirectTag t m)
   where
+
     getOwnUtxo addr = do
         utxo <- GS.getFilteredUtxo addr
         updates <- getUtxoModifier

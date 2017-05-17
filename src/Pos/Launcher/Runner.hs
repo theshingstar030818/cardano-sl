@@ -453,8 +453,9 @@ runCH
     -> m a
 runCH allWorkersNum params@NodeParams {..} sscNodeContext db act = do
     ncLoggerConfig <- getRealLoggerConfig $ bpLoggingParams npBaseParams
+    let alwaysLog = const (pure True)
     ncJLFile <- JLFile <$>
-        liftIO (maybe (pure Nothing) (fmap Just . newMVar . Left) npJLFile)
+        liftIO (maybe (pure Nothing) (fmap (Just . flip (,) alwaysLog) . newMVar . Left) npJLFile)
     ncBlkSemaphore <- BlkSemaphore <$> newEmptyMVar
     ucUpdateSemaphore <- newEmptyMVar
 

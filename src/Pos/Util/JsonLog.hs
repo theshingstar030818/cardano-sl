@@ -9,6 +9,7 @@ module Pos.Util.JsonLog
        , JLBlock (..)
        , JLTxS (..)
        , JLTxR (..)
+       , JLMemPool (..)
        , JLTimedEvent (..)
        , jlCreatedBlock
        , jlAdoptedBlock
@@ -26,7 +27,6 @@ import           Data.Aeson.TH           (deriveJSON)
 import qualified Data.ByteString.Lazy    as LBS
 import qualified Ether
 import           Formatting              (sformat)
-import           Mockable                (Catch, Mockable)
 import           Serokell.Aeson.Options  (defaultOptions)
 import           System.IO               (hClose)
 import           System.Wlog             (CanLog, HasLoggerName)
@@ -72,13 +72,30 @@ data JLTxR = JLTxR
 fromJLSlotId :: JLSlotId -> SlotId
 fromJLSlotId (ep, sl) = SlotId (fromIntegral ep) (fromIntegral sl)
 
+-- | Json log of one mempool modification.
+data JLMemPool = JLMemPool
+    { -- | Reason for modifying the mempool
+      jlmReason      :: Text
+      -- | Queue length when trying to modify the mempool (not including this
+      --   modifier, so it could be 0).
+    , jlmQueueLength :: Int
+      -- | Time spent waiting for the lock (microseconds)
+    , jlmWait        :: Integer
+      -- | Time spent doing the modification (microseconds, while holding the lock).
+    , jlmModify      :: Integer
+      -- | Size of the mempool before the modification.
+    , jlmSizeBefore  :: Int
+      -- | Size of the mempool after the modification.
+    , jlmSizeAfter   :: Int
+    } deriving Show
+
 -- | Json log event.
 data JLEvent = JLCreatedBlock JLBlock
              | JLAdoptedBlock BlockId
              | JLTpsStat Int
-             | JLMemPoolSize Int
              | JLTxSent JLTxS
              | JLTxReceived JLTxR 
+             | JLMemPoolEvent JLMemPool
   deriving Show
 
 -- | 'JLEvent' with 'Timestamp' -- corresponding time of this event.
@@ -90,6 +107,7 @@ data JLTimedEvent = JLTimedEvent
 $(deriveJSON defaultOptions ''JLBlock)
 $(deriveJSON defaultOptions ''JLTxS)
 $(deriveJSON defaultOptions ''JLTxR)
+$(deriveJSON defaultOptions ''JLMemPool)
 $(deriveJSON defaultOptions ''JLEvent)
 $(deriveJSON defaultOptions ''JLTimedEvent)
 
@@ -116,12 +134,14 @@ jlAdoptedBlock = JLAdoptedBlock . showHash . headerHash
 
 -- | Append event into log by given 'Handle'
 appendJL :: (MonadIO m) => JLFile -> JLEvent -> m ()
-appendJL (JLFile mMVar) ev = whenJust mMVar $ \v -> do
-    time <- currentTime
-    let codedEvent = encode $ JLTimedEvent (fromIntegral time) ev
-    liftIO $ withMVar v $ \choice -> case choice of
-        Left fp -> bracket (openFile fp WriteMode) hClose (flip LBS.hPut codedEvent)
-        Right h -> LBS.hPut h codedEvent
+appendJL (JLFile mMVar) ev = whenJust mMVar $ \(v, decide) -> do
+    shouldLog <- liftIO $ decide ev
+    when shouldLog $ do
+        time <- currentTime
+        let codedEvent = encode $ JLTimedEvent (fromIntegral time) ev
+        liftIO $ withMVar v $ \choice -> case choice of
+            Left fp -> bracket (openFile fp WriteMode) hClose (flip LBS.hPut codedEvent)
+            Right h -> LBS.hPut h codedEvent
 
 -- | Note: not an ideal representation. One branch used
 --     Maybe (MVar FilePath)
@@ -133,13 +153,12 @@ appendJL (JLFile mMVar) ev = whenJust mMVar $ \v -> do
 --   at each 'jlLog', whereas giving a handle allows the caller to control
 --   acquision and release, possibly holding the file open for the duration
 --   of the program.
-newtype JLFile = JLFile (Maybe (MVar (Either FilePath Handle)))
+newtype JLFile = JLFile (Maybe (MVar (Either FilePath Handle), JLEvent -> IO Bool))
 
 -- | Monad for things that can log Json log events.
 type MonadJL m =
     ( Ether.MonadReader' JLFile m
     , MonadIO m
-    , Mockable Catch m
     , HasLoggerName m
     , CanLog m )
 
@@ -148,11 +167,11 @@ jlLog ev = Ether.ask' >>= flip appendJL ev
 
 usingJsonLogFilePath
     :: ( MonadIO m, MonadMask m )
-    => Maybe FilePath
+    => Maybe (FilePath, JLEvent -> IO Bool)
     -> Ether.ReaderT' JLFile m a
     -> m a
-usingJsonLogFilePath mPath act = case mPath of
+usingJsonLogFilePath mPathAndDecider act = case mPathAndDecider of
     Nothing   -> Ether.runReaderT' act (JLFile Nothing)
-    Just path -> bracket (openFile path WriteMode) (liftIO . hClose) $ \h -> do
+    Just (path, decider) -> bracket (openFile path WriteMode) (liftIO . hClose) $ \h -> do
         hMV <- newMVar (Right h)
-        Ether.runReaderT' act (JLFile (Just hMV))
+        Ether.runReaderT' act (JLFile (Just (hMV, decider)))
