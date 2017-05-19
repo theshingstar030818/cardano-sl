@@ -83,8 +83,8 @@ import           Pos.DHT.Real                 (KademliaDHTInstance,
 import           Pos.Discovery.Holders        (runDiscoveryConstT, runDiscoveryKademliaT)
 import           Pos.Discovery.Holders        (DiscoveryKademliaT, DiscoveryConstT)
 import           Pos.Genesis                  (genesisLeaders, genesisSeed)
-import           Pos.Launcher.Param           (BaseParams (..), LoggingParams (..),
-                                               NodeParams (..))
+import           Pos.Launcher.Param          (BaseParams (..), LoggingParams (..),
+                                              NodeParams (..), Backpressure (..))
 import           Pos.Lrc.Context              (LrcContext (..), LrcSyncData (..))
 import qualified Pos.Lrc.DB                   as LrcDB
 import           Pos.Lrc.Fts                  (followTheSatoshiM)
@@ -162,6 +162,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
         ekgMemPoolModifyTime <- liftIO $ Metrics.createGauge (pack "MemPoolModifyTime") ekgStore
         ekgMemPoolQueueLength <- liftIO $ Metrics.createGauge (pack "MemPoolQueueLength") ekgStore
 
+
         -- An exponential moving average is used for the time gauges (wait
         -- and modify durations). The parameter alpha is chosen somewhat
         -- arbitrarily.
@@ -199,7 +200,6 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
                       liftIO $ Metrics.Gauge.set ekgMemPoolModifyTime new
                       logDebug $ sformat ("MemPool metrics release: modify time was "%shown%" size is "%shown) timeElapsed memPoolSize
                 }
-
 
         -- TODO [CSL-775] need an effect-free way of running this into IO.
         let runIO :: forall t . RawRealMode ssc t -> IO t
@@ -241,24 +241,29 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
 
         let mkTransport = simpleNodeEndPoint transport
 
-        -- TODO have the receive delay for the dispatcher thread grow as
-        -- the mempool queue length grows.
-        -- The mempool queue will clear without any need to draw more data
-        -- from the network, so it should be ok to do this.
-        -- It might look something like this:
-        {-
-        let mkReceiveDelay _ = do
+        -- The receive delay uses two thresholds and corresponding delays.
+        -- Depending upon where some estimator (TBD) falls (below, between,
+        -- or above) a different delay will apply (no delay if it's below).
+        let lowerThreshold = fst (bpressLevelOne npBackpressure)
+            upperThreshold = fst (bpressLevelTwo npBackpressure)
+            lowerDelay = snd (bpressLevelOne npBackpressure)
+            upperDelay = snd (bpressLevelOne npBackpressure)
+
+            mkReceiveDelay _ = do
+                {-
+                -- Maybe we'll use something tlike this for the estimator?
                 qlength <- liftIO $ Metrics.Gauge.read ekgMemPoolQueueLength
                 waitTime <- liftIO $ Metrics.Gauge.read ekgMemPoolWaitTime
-                let expectedWait = qlength * waitTime
-                if expectedWait < 100
+                let estimate = qlength * waitTime
+                -}
+                let estimate :: Word32
+                    estimate = 0
+                if estimate < lowerThreshold
                 then return Nothing
-                else do
-                    let actualDelay = fromIntegral expectedWait
-                    logDebug $ sformat ("delaying network input for "%shown) actualDelay
-                    return $ Just actualDelay
-        -}
-        let mkReceiveDelay _ = pure Nothing
+                else if estimate < upperThreshold
+                then return $ Just lowerDelay
+                else return $ Just upperDelay
+
 
         sscState <-
            runCH @ssc allWorkersNum np initNC modernDBs .

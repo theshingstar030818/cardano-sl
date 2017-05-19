@@ -278,6 +278,7 @@ getNodeParams args@Args {..} systemStart = do
             , upUpdateServers = CLI.updateServers commonArgs
             }
         , npUseNTP = not noNTP
+        , npBackpressure = backpressure
         }
 
 gtSscParams :: Args -> VssKeyPair -> GtParams
