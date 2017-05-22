@@ -58,7 +58,7 @@ import           Pos.Txp                      (MonadUtxoRead, Tx (..), TxAux,
                                                TxWitness, Utxo, UtxoStateT, applyTxToUtxo,
                                                evalUtxoStateT, filterUtxoByAddr,
                                                getLocalTxs, runUtxoStateT, topsortTxs,
-                                               txOutAddress, utxoGet)
+                                               txOutAddress, utxoGet, TransactionProvenance (..))
 import           Pos.Types                    (Address, Block, ChainDifficulty,
                                                HeaderHash, blockTxas, difficultyL,
                                                prevBlockL)
@@ -254,7 +254,7 @@ instance
         maybe (error "deriveAddrHistory: Nothing") pure mres
 
 #ifdef WITH_EXPLORER
-    saveTx txw = () <$ runExceptT (eTxProcessTransaction txw)
+    saveTx txw = () <$ runExceptT (eTxProcessTransaction History txw)
 #else
-    saveTx txw = () <$ runExceptT (txProcessTransaction txw)
+    saveTx txw = () <$ runExceptT (txProcessTransaction History txw)
 #endif

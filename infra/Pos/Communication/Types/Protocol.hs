@@ -29,11 +29,16 @@ module Pos.Communication.Types.Protocol
        , WorkerSpec
        , ActionSpec (..)
        , N.NodeId
+       , JsonNodeId (..)
        ) where
 
+import           Data.Aeson            (ToJSON (..), FromJSON (..))
 import qualified Data.HashMap.Strict   as HM
 import qualified Data.Text.Buildable   as B
-import qualified Data.ByteString       as BS (length)
+import qualified Data.Text.Encoding    as Text (encodeUtf8, decodeUtf8)
+import qualified Data.Binary           as Bin
+import qualified Data.ByteString.Lazy  as BL
+import qualified Data.ByteString.Base64 as B64 (encode, decode)
 import           Formatting            (bprint, build, hex, int, sformat, stext, (%))
 import qualified Node                  as N
 import           Node.Message          (Message (..), MessageName (..))
@@ -78,6 +83,23 @@ data Conversation m t where
         :: ( Bi snd, Message snd, Bi rcv, Message rcv )
         => (N.ConversationActions snd rcv m -> m t)
         -> Conversation m t
+
+-- | A NodeId which has To/From JSON instances, using the N.NodeId Binary
+--   instance and base64 encoding.
+newtype JsonNodeId = JsonNodeId N.NodeId
+  deriving (Eq, Ord, Show)
+
+instance ToJSON JsonNodeId where
+    toJSON (JsonNodeId nodeId) = toJSON . Text.decodeUtf8 . B64.encode . BL.toStrict . Bin.encode $ nodeId
+
+instance FromJSON JsonNodeId where
+    parseJSON v = do
+        bs <- Text.encodeUtf8 <$> parseJSON v
+        case B64.decode bs of
+            Left err -> fail err
+            Right b64decoded -> case Bin.decodeOrFail (BL.fromStrict b64decoded) of
+                Left (_, _, err) -> fail err
+                Right (_, _, nodeId) -> pure $ JsonNodeId nodeId
 
 data HandlerSpec
     = ConvHandler { hsReplyType :: MessageName}
