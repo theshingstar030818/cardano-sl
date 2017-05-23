@@ -22,9 +22,10 @@ module Pos.Util.JsonLog
        ) where
 
 import           Control.Concurrent.MVar (withMVar)
-import           Data.Aeson              (encode, FromJSON (..), withObject, (.:), genericParseJSON)
+import           Data.Aeson              (encode, FromJSON (..), withObject, (.:),
+                                          (.:?), genericParseJSON)
 import           Data.Aeson.TH           (deriveJSON, deriveToJSON)
-import qualified Data.ByteString.Lazy    as LBS
+import qualified Data.ByteString.Lazy     as LBS
 import qualified Ether
 import           Formatting              (sformat)
 import           Serokell.Aeson.Options  (defaultOptions)
@@ -40,7 +41,7 @@ import           Pos.Ssc.Class.Types     (Ssc)
 import           Pos.Types               (BiSsc, Block, SlotId (..), blockHeader,
                                           blockTxs, epochIndexL, gbHeader, gbhPrevBlock,
                                           headerHash, headerSlot)
-import           Pos.Txp.MemState.Types  (MemPoolModifyReason (Unknown))
+import           Pos.Txp.MemState.Types  (MemPoolModifyReason (Custom, Unknown))
 import           Pos.Util.TimeWarp       (currentTime)
 
 type BlockId = Text
@@ -118,7 +119,41 @@ instance FromJSON JLEvent where
 
     parseJSON = \v -> 
         (    (genericParseJSON defaultOptions v)
-         <|> (withObject "JLEvent" $ \o -> JLMemPoolEvent <$> (JLMemPool Unknown 0 0 0 0 0 <$> o .: "memPoolSize")) v)
+         -- Second iteration of JLMemPoolEvent: the 'reason' was Text and
+         -- the allocation field was optional.
+         <|> (flip (withObject "JLEvent") v $ \oEvent -> do
+                 oMemPool <- oEvent .: "memPoolEvent"
+                 reason <- oMemPool .: "reason"
+                 queueLength <- oMemPool .: "queueLength"
+                 wait <- oMemPool .: "wait"
+                 modify_ <- oMemPool .: "modify"
+                 sizeBefore <- oMemPool .: "sizeBefore"
+                 sizeAfter <- oMemPool .: "sizeAfter"
+                 mAllocated <- oMemPool .:? "allocated"
+                 pure $ JLMemPoolEvent $ JLMemPool
+                     { jlmReason = Custom reason
+                     , jlmQueueLength = queueLength
+                     , jlmWait = wait
+                     , jlmModify = modify_
+                     , jlmSizeBefore = sizeBefore
+                     , jlmSizeAfter = sizeAfter
+                     , jlmAllocated = maybe 0 identity mAllocated
+                     }
+             )
+         -- First iteration of JLMemPoolEvent: only the mempool size was recorded.
+         <|> (flip (withObject "JLEvent") v $ \o -> do
+                 sizeAfter <- o .: "memPoolSize"
+                 pure $ JLMemPoolEvent $ JLMemPool
+                     { jlmReason = Unknown
+                     , jlmQueueLength = 0
+                     , jlmWait = 0
+                     , jlmModify = 0
+                     , jlmSizeBefore = 0
+                     , jlmSizeAfter = sizeAfter
+                     , jlmAllocated = 0
+                     }
+             )
+        )
 
 -- | Return event of created block.
 jlCreatedBlock :: BiSsc ssc => Block ssc -> JLEvent
