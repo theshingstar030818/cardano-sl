@@ -201,8 +201,6 @@ handleDataL proxy __nodeId msg@(DataMsg {..}) =
         shouldPropagate <- _rlyIsPropagation <$> askRelayMem
         if shouldPropagate then do
             tag <- contentsToTag dmContents
-            let inv :: InvOrData tag key contents
-                inv = Left $ InvMsg tag dmKey
             addToRelayQueue tag dmKey dmContents
             logInfo $ sformat
                 ("Adopted data "%build%" "%

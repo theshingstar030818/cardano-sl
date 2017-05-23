@@ -25,7 +25,7 @@ import           Control.Lens             (iso)
 import           Control.Monad.Fix        (MonadFix)
 import           Control.Monad.Trans      (MonadTrans (..))
 import           Data.Aeson               (encode, FromJSON (..), withObject, (.:),
-                                           (.:?), Object, Value(..), genericParseJSON)
+                                           (.:?), genericParseJSON)
 import           Data.Aeson.TH            (deriveJSON, deriveToJSON)
 import qualified Data.ByteString.Lazy     as LBS
 import           Formatting               (sformat)
@@ -40,7 +40,7 @@ import           Serokell.Aeson.Options   (defaultOptions)
 import           Serokell.Util.Lens       (WrappedM (..))
 import           System.IO                (hClose)
 import           System.Wlog              (CanLog)
-import           Universum
+import           Universum                hiding (modify)
 
 import           Pos.Binary.Block         ()
 import           Pos.Binary.Core          ()
