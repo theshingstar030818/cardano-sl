@@ -17,6 +17,7 @@ import           Pos.Block.Worker        (blkWorkers)
 import           Pos.Communication       (OutSpecs, WorkerSpec, localWorker, relayWorkers,
                                           wrapActionSpec)
 import           Pos.Communication.Specs (allOutSpecs)
+import           Pos.Context.Holder      (defaultRelayLogCallback)
 import           Pos.DB                  (MonadDBCore)
 import           Pos.Delegation          (dlgWorkers)
 import           Pos.Lrc.Worker          (lrcOnNewSlotWorker)
@@ -54,7 +55,7 @@ allWorkers = mconcatPair
     , wrap' "txp"        $ txpWorkers
     , wrap' "delegation" $ dlgWorkers
     , wrap' "slotting"   $ (properSlottingWorkers, mempty)
-    , wrap' "relay"      $ relayWorkers allOutSpecs
+    , wrap' "relay"      $ relayWorkers allOutSpecs defaultRelayLogCallback
 
     -- I don't know, guys, I don't know :(
     -- , const ([], mempty) statsWorkers

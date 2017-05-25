@@ -23,7 +23,8 @@ import           Pos.Communication.Relay     (MonadRelayMem)
 import           Pos.Context                 (BlkSemaphore, MonadBlockRetrievalQueue,
                                               MonadLastKnownHeader, MonadProgressHeader,
                                               MonadRecoveryHeader, MonadSscContext,
-                                              NodeParams, StartTime, TxpGlobalSettings)
+                                              NodeParams, StartTime, TxpGlobalSettings,
+                                              MonadNodeContext)
 import           Pos.DB.Class                (MonadDB)
 import           Pos.DB.DB                   ()
 import           Pos.DB.Limits               (MonadDBLimits)
@@ -86,6 +87,7 @@ type WorkMode ssc m
       , WithPeerState m
       , MonadShutdownMem m
       , MonadDiscovery m
+      , MonadNodeContext ssc m
       )
 
 -- | More relaxed version of 'WorkMode'.

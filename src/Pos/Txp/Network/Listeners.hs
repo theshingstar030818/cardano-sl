@@ -21,6 +21,7 @@ import           Pos.Communication.Protocol (ListenerSpec, OutSpecs, NodeId,
                                              JsonNodeId (..))
 import           Pos.Communication.Relay    (Relay (..), RelayProxy (..), relayListeners,
                                              relayStubListeners)
+import           Pos.Context.Holder         (defaultRelayLogCallback)
 import           Pos.Crypto                 (hash)
 import           Pos.Statistics             (StatProcessTx (..), statlogCountEvent)
 import           Pos.Txp.Core.Types         (TxAux, TxId)
@@ -42,7 +43,7 @@ txProxy = RelayProxy
 txListeners
     :: WorkMode ssc m
     => m ([ListenerSpec m], OutSpecs)
-txListeners = relayListeners txProxy
+txListeners = relayListeners txProxy defaultRelayLogCallback
 
 txStubListeners
     :: WithLogger m

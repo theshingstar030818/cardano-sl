@@ -69,6 +69,7 @@ import           Pos.Core                     (Timestamp ())
 import           Pos.Crypto                   (createProxySecretKey, encToPublic)
 import qualified System.Remote.Monitoring     as Monitoring
 import qualified System.Metrics               as Metrics
+import qualified System.Metrics.Counter       as Metrics.Counter
 import qualified System.Metrics.Gauge         as Metrics.Gauge
 import           Pos.DB                       (MonadDB, NodeDBs)
 import           Pos.DB.DB                    (initNodeDBs, openNodeDBs)
@@ -83,6 +84,70 @@ import           Pos.DHT.Real                 (KademliaDHTInstance,
 import           Pos.Discovery.Holders        (runDiscoveryConstT, runDiscoveryKademliaT)
 import           Pos.Discovery.Holders        (DiscoveryKademliaT, DiscoveryConstT)
 import           Pos.Genesis                  (genesisLeaders, genesisSeed)
+{-
+=======
+import           Control.Concurrent.STM      (newEmptyTMVarIO, newTBQueueIO)
+import           Control.Lens                (each, to, _tail)
+import           Control.Monad.Fix           (MonadFix)
+import           Data.Default                (def)
+import           Data.Tagged                 (untag)
+import           Data.Text                   (pack)
+import qualified Data.Time                   as Time
+import           Formatting                  (build, sformat, shown, (%))
+import           Mockable                    (CurrentTime, Mockable, MonadMockable, 
+                                              Bracket, Production (..), Throw, 
+                                              bracket, finally, throw)
+import           Network.QDisc.Fair          (fairQDisc)
+import           Network.Transport.Abstract  (Transport, closeTransport, hoistTransport)
+import           Network.Transport.Concrete  (concrete)
+import qualified Network.Transport.TCP       as TCP
+import           Node                        (Node, NodeAction (..),
+                                              defaultNodeEnvironment, hoistSendActions,
+                                              node, simpleNodeEndPoint,
+                                              NodeEndPoint, Statistics,
+                                              ReceiveDelay, noReceiveDelay)
+import           Node.Util.Monitor           (setupMonitor, stopMonitor)
+import qualified STMContainers.Map           as SM
+import           System.IO                   (hClose, hSetBuffering,
+                                              BufferMode (NoBuffering))
+import           System.Random               (newStdGen)
+import qualified System.Remote.Monitoring    as Monitoring
+import qualified System.Metrics              as Metrics
+import qualified System.Metrics.Counter      as Metrics.Counter
+import qualified System.Metrics.Gauge        as Metrics.Gauge
+import           System.Wlog                 (LoggerConfig (..), WithLogger, logError,
+                                              logInfo, logDebug, productionB,
+                                              releaseAllHandlers, setupLogging,
+                                              usingLoggerName)
+import           Universum                   hiding (bracket, finally)
+
+import           Pos.Binary                  ()
+import           Pos.CLI                     (readLoggerConfig)
+import           Pos.Communication           (ActionSpec (..), BiP (..), InSpecs (..),
+                                              ListenersWithOut, NodeId, OutSpecs (..),
+                                              PeerId (..), VerInfo (..), allListeners,
+                                              hoistListenerSpec, unpackLSpecs)
+import           Pos.Communication.PeerState (runPeerStateHolder)
+import qualified Pos.Constants               as Const
+import           Pos.Context                 (ContextHolder, NodeContext (..),
+                                              runContextHolder)
+import           Pos.Core                    (Timestamp ())
+import           Pos.Crypto                  (createProxySecretKey, encToPublic)
+import           Pos.DB                      (DBHolder, MonadDB, NodeDBs, runDBHolder)
+import           Pos.DB.DB                   (initNodeDBs, openNodeDBs)
+import           Pos.DB.GState               (getTip)
+import           Pos.DB.Misc                 (addProxySecretKey)
+import           Pos.Delegation.Holder       (runDelegationT)
+import           Pos.DHT.Real                (KademliaDHTInstance,
+                                              KademliaDHTInstanceConfig (..),
+                                              KademliaParams (..), startDHTInstance,
+                                              stopDHTInstance)
+import           Pos.Discovery.Holders       (DiscoveryKademliaT, DiscoveryConstT,
+                                              runDiscoveryConstT,
+                                              runDiscoveryKademliaT)
+import           Pos.Genesis                 (genesisLeaders, genesisSeed)
+>>>>>>> added relay queue monitoring (json logs and ekg)
+-}
 import           Pos.Launcher.Param          (BaseParams (..), LoggingParams (..),
                                               NodeParams (..), Backpressure (..))
 import           Pos.Lrc.Context              (LrcContext (..), LrcSyncData (..))
@@ -141,7 +206,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
         modernDBs <- openNodeDBs npRebuildDb npDbPathM
         let allWorkersNum = allWorkersCount @ssc @(ProductionMode ssc) :: Int
         -- TODO [CSL-775] ideally initialization logic should be in scenario.
-        runCH @ssc allWorkersNum np initNC modernDBs $
+        runCH @ssc allWorkersNum np initNC modernDBs (return ()) (const (return ())) $
             flip Ether.runReaderT' modernDBs $ initNodeDBs @ssc
         initTip <- Ether.runReaderT' getTip modernDBs
         stateM <- liftIO SM.newIO
@@ -161,7 +226,8 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
         ekgMemPoolWaitTime <- liftIO $ Metrics.createGauge (pack "MemPoolWaitTime") ekgStore
         ekgMemPoolModifyTime <- liftIO $ Metrics.createGauge (pack "MemPoolModifyTime") ekgStore
         ekgMemPoolQueueLength <- liftIO $ Metrics.createGauge (pack "MemPoolQueueLength") ekgStore
-
+        ekgRelayQueueFull <- liftIO $ Metrics.createCounter (pack "RelayQueueFull") ekgStore
+        ekgRelayQueueEnqueueDequeueTime <- liftIO $ Metrics.createGauge (pack "RelayQueueEnqueueDequeueTime") ekgStore
 
         -- An exponential moving average is used for the time gauges (wait
         -- and modify durations). The parameter alpha is chosen somewhat
@@ -200,6 +266,8 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
                       liftIO $ Metrics.Gauge.set ekgMemPoolModifyTime new
                       logDebug $ sformat ("MemPool metrics release: modify time was "%shown%" size is "%shown) timeElapsed memPoolSize
                 }
+            onRelayQueueFull = Metrics.Counter.inc ekgRelayQueueFull
+            onRelayQueueDequeue = Metrics.Gauge.set ekgRelayQueueEnqueueDequeueTime . fromIntegral
 
         -- TODO [CSL-775] need an effect-free way of running this into IO.
         let runIO :: forall t . RawRealMode ssc t -> IO t
@@ -207,7 +275,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
                deleg <- newTVarIO def
                runProduction .
                    usingLoggerName lpRunnerTag .
-                   runCH @ssc allWorkersNum np initNC modernDBs .
+                   runCH @ssc allWorkersNum np initNC modernDBs onRelayQueueFull onRelayQueueDequeue .
                    flip Ether.runReadersT
                       ( Tagged @NodeDBs modernDBs
                       , Tagged @SlottingVar slottingVar
@@ -266,7 +334,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
 
 
         sscState <-
-           runCH @ssc allWorkersNum np initNC modernDBs .
+           runCH @ssc allWorkersNum np initNC modernDBs (return ()) (const (return ())) .
            flip Ether.runReadersT
                ( Tagged @NodeDBs modernDBs
                , Tagged @SlottingVar slottingVar
@@ -276,7 +344,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
            runSlotsRedirect $
            mkSscState @ssc
         deleg <- newTVarIO def
-        runCH allWorkersNum np initNC modernDBs .
+        runCH allWorkersNum np initNC modernDBs onRelayQueueFull onRelayQueueDequeue .
            flip Ether.runReadersT
                ( Tagged @NodeDBs modernDBs
                , Tagged @SlottingVar slottingVar
@@ -454,9 +522,11 @@ runCH
     -> NodeParams
     -> SscNodeContext ssc
     -> NodeDBs
+    -> IO ()
+    -> (Integer -> IO ())
     -> Ether.ReadersT (NodeContext ssc) m a
     -> m a
-runCH allWorkersNum params@NodeParams {..} sscNodeContext db act = do
+runCH allWorkersNum params@NodeParams {..} sscNodeContext db onRelayQueueFull onRelayQueueDequeue act = do
     ncLoggerConfig <- getRealLoggerConfig $ bpLoggingParams npBaseParams
     let alwaysLog = const (pure True)
     ncJLFile <- JLFile <$>
@@ -500,6 +570,8 @@ runCH allWorkersNum params@NodeParams {..} sscNodeContext db act = do
             , ncUpdateContext = UpdateContext {..}
             , ncNodeParams = params
             , ncSendLock = Nothing
+            , ncOnRelayQueueFull = onRelayQueueFull
+            , ncOnRelayDequeue = onRelayQueueDequeue
 #ifdef WITH_EXPLORER
             , ncTxpGlobalSettings = explorerTxpGlobalSettings
 #else

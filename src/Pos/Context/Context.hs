@@ -188,6 +188,12 @@ data NodeContext ssc = NodeContext
     -- ^ Leaders of the first epoch
     , ncConnectedPeers      :: !ConnectedPeers
     -- ^ Set of peers that we're connected to.
+    , ncOnRelayQueueFull :: IO ()
+    -- ^ Action to execute when data could not be added to the relay queue
+    -- (for monitoring).
+    , ncOnRelayDequeue :: Integer -> IO ()
+    -- ^ Action to execute when a message has been dequeued from the relay
+    -- queue. The argument is the time from enqueue to dequeue in micro seconds.
     }
 
 makeLensesFor

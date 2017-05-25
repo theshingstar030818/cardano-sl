@@ -24,6 +24,7 @@ import           Pos.Communication.Message        ()
 import           Pos.Communication.Relay          (Relay (..), RelayProxy (..),
                                                    relayListeners, relayStubListeners)
 import           Pos.Context                      (NodeParams)
+import           Pos.Context.Holder               (defaultRelayLogCallback)
 import           Pos.Security                     (shouldIgnorePkAddress)
 import           Pos.Ssc.Class.Listeners          (SscListenersClass (..))
 import           Pos.Ssc.Extra                    (sscRunLocalQuery)
@@ -44,6 +45,7 @@ instance SscListenersClass SscGodTossing where
     sscListeners =
         Tagged <$> relayListeners
                     (RelayProxy :: RelayProxy StakeholderId GtTag GtMsgContents)
+                    defaultRelayLogCallback
     sscStubListeners =
         Tagged $ relayStubListeners
                     (RelayProxy :: RelayProxy StakeholderId GtTag GtMsgContents)

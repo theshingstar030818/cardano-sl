@@ -8,6 +8,7 @@ module Pos.Txp.Worker
 import           Universum
 
 import           Pos.Communication   (OutSpecs, WorkerSpec)
+import           Pos.Context.Holder  (defaultRelayLogCallback)
 import           Pos.Ssc.Class       (SscWorkersClass)
 import           Pos.Util            (mconcatPair)
 import           Pos.WorkMode.Class  (WorkMode)
@@ -147,7 +148,7 @@ requestTxs sendActions node txIds = do
                     dt' <- recv conv
                     case withLimitedLength <$> dt' of
                         Nothing -> error "didn't get an answer to Req"
-                        Just x  -> expectData (handleDataL txProxy node) x
+                        Just x  -> expectData (\y -> handleDataL txProxy node y defaultRelayLogCallback) x
             for_ txIds $ \id ->
                 getTx id `catch` handler id
     logInfo $ sformat

@@ -61,7 +61,8 @@ import           Pos.Communication.Relay.Types      (RelayContext (..), RelayPro
                                                      SomeInvMsg (..))
 import           Pos.Communication.Relay.Util       (expectData, expectInv)
 import           Pos.Communication.Types.Relay      (DataMsg (..), InvMsg (..), InvOrData,
-                                                     MempoolMsg (..), ReqMsg (..))
+                                                     MempoolMsg (..), ReqMsg (..),
+                                                     RelayLogEvent (..), RelayLogCallback)
 import           Pos.Communication.Util             (stubListenerConv)
 import           Pos.DB.Limits                      (MonadDBLimits)
 import           Pos.Discovery.Broadcast            (converseToNeighbors)
@@ -187,8 +188,9 @@ handleDataL
     => RelayProxy key tag contents
     -> NodeId
     -> DataMsg contents
+    -> RelayLogCallback m
     -> m ()
-handleDataL proxy __nodeId msg@(DataMsg {..}) =
+handleDataL proxy __nodeId msg@(DataMsg {..}) logCallback =
     processMessage () "Data" dmContents verifyDataContents $ do
         let _ = dataCatchType proxy msg
         dmKey <- contentsToKey dmContents
@@ -201,7 +203,7 @@ handleDataL proxy __nodeId msg@(DataMsg {..}) =
         shouldPropagate <- _rlyIsPropagation <$> askRelayMem
         if shouldPropagate then do
             tag <- contentsToTag dmContents
-            addToRelayQueue tag dmKey dmContents
+            addToRelayQueue logCallback tag dmKey dmContents
             logInfo $ sformat
                 ("Adopted data "%build%" "%
                   "for key "%build%", data has been pushed to propagation queue...")
@@ -243,8 +245,8 @@ relayListeners
      , RelayWorkMode m
      , MonadDBLimits m
      )
-  => RelayProxy key tag contents -> m ([ListenerSpec m], OutSpecs)
-relayListeners proxy =
+  => RelayProxy key tag contents -> RelayLogCallback m -> m ([ListenerSpec m], OutSpecs)
+relayListeners proxy logCallback =
     mergeLs <$> sequence
         [handleReqL proxy, handleMempoolL proxy, invDataListener]
   where
@@ -263,7 +265,7 @@ relayListeners proxy =
                         send conv $ ReqMsg imTag ne
                         dt' <- recv conv
                         whenJust (withLimitedLength <$> dt') $ expectData $
-                            \dt -> handleDataL proxy __nodeId dt
+                            \dt -> handleDataL proxy __nodeId dt logCallback
 
 relayStubListeners
     :: ( WithLogger m
@@ -308,7 +310,6 @@ invDataMsgProxy :: RelayProxy key tag contents
                 -> Proxy (InvOrData tag key contents, ReqMsg key tag)
 invDataMsgProxy _ = Proxy
 
-
 addToRelayQueue
     :: forall tag key contents m.
        ( Bi (InvOrData tag key contents)
@@ -320,14 +321,16 @@ addToRelayQueue
        , Eq key
        , RelayWorkMode m
        )
-    => tag -> key -> contents -> m ()
-addToRelayQueue tag key conts = do
+    => RelayLogCallback m -> tag -> key -> contents -> m ()
+addToRelayQueue logCallback tag key conts = do
     queue <- _rlyPropagationQueue <$> askRelayMem
     isFull <- atomically $ isFullTBQueue queue
-    if isFull then
+    if isFull then do
         logWarning $ "Propagation queue is full, no propagation"
-    else
-        atomically $ writeTBQueue queue (SomeInvMsg tag key conts)
+        logCallback RelayQueueFull
+    else do
+        ts <- currentTime
+        atomically $ writeTBQueue queue (ts, SomeInvMsg tag key conts)
 
 relayWorkers
     :: forall m.
@@ -337,18 +340,20 @@ relayWorkers
        , MonadMask m
        , MonadReportingMem m
        )
-    => OutSpecs -> ([WorkerSpec m], OutSpecs)
-relayWorkers allOutSpecs =
+    => OutSpecs -> RelayLogCallback m -> ([WorkerSpec m], OutSpecs)
+relayWorkers allOutSpecs logCallback =
     first (:[]) $ worker allOutSpecs $ \sendActions ->
         handleAll handleWE $ reportingFatal version $ action sendActions
   where
     action sendActions = do
         queue <- _rlyPropagationQueue <$> askRelayMem
         forever $ atomically (readTBQueue queue) >>= \case
-            SomeInvMsg tag key contents -> do
+            (ts, SomeInvMsg tag key contents) -> do
                 logDebug $ sformat
                     ("Propagation data with key: "%build%
                      " and tag: "%build) key tag
+                ts' <- currentTime
+                logCallback $ EnqueueDequeueTime $ fromIntegral $ ts' - ts
                 converseToNeighbors sendActions $ \__nodeId ->
                     pure $ Conversation $ convHandler tag key contents __nodeId
 

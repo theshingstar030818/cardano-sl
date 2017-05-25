@@ -1,31 +1,34 @@
 -- | Server which handles update system.
 
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Pos.Update.Network.Listeners
        ( usListeners
        , usStubListeners
        ) where
 
-import           Formatting                 (build, sformat, (%))
-import           Serokell.Util.Verify       (VerificationRes (..))
-import           System.Wlog                (WithLogger, logDebug, logWarning)
+import           Formatting                    (build, sformat, (%))
+import           Serokell.Util.Verify          (VerificationRes (..))
+import           System.Wlog                   (WithLogger, logDebug, logWarning)
 import           Universum
 
-import           Pos.Binary.Communication   ()
-import           Pos.Binary.Relay           ()
-import           Pos.Communication.Limits   ()
-import           Pos.Communication.Message  ()
-import           Pos.Communication.Protocol (ListenerSpec, OutSpecs)
-import           Pos.Communication.Relay    (Relay (..), RelayProxy (..), relayListeners,
-                                             relayStubListeners)
-import           Pos.Crypto                 (hash)
-import           Pos.Update.Core            (UpId, UpdateProposal (..), UpdateVote (..),
-                                             VoteId)
-import           Pos.Update.Logic.Local     (getLocalProposalNVotes, getLocalVote,
-                                             isProposalNeeded, isVoteNeeded,
-                                             processProposal, processVote)
-import           Pos.Update.Mode            (UpdateMode)
-import           Pos.Update.Network.Types   (ProposalMsgTag (..), VoteMsgTag (..))
-import           Pos.Util                   (mappendPair)
+import           Pos.Binary.Communication      ()
+import           Pos.Binary.Relay              ()
+import           Pos.Communication.Limits      ()
+import           Pos.Communication.Message     ()
+import           Pos.Communication.Protocol    (ListenerSpec, OutSpecs)
+import           Pos.Communication.Relay       (Relay (..), RelayProxy (..), relayListeners,
+                                                relayStubListeners)
+import           Pos.Crypto                    (hash)
+import           Pos.Update.Core               (UpId, UpdateProposal (..), UpdateVote (..),
+                                                VoteId)
+import           Pos.Update.Logic.Local        (getLocalProposalNVotes, getLocalVote,
+                                                isProposalNeeded, isVoteNeeded,
+                                                processProposal, processVote)
+import           Pos.Update.Mode               (UpdateMode)
+import           Pos.Update.Network.Types      (ProposalMsgTag (..), VoteMsgTag (..))
+import           Pos.Util                      (mappendPair)
+import           Pos.Util.JsonLog              (noOpRelayLogCallback)
 
 proposalProxy :: RelayProxy UpId ProposalMsgTag (UpdateProposal, [UpdateVote])
 proposalProxy = RelayProxy
@@ -35,11 +38,11 @@ voteProxy = RelayProxy
 
 -- | Listeners for requests related to update system
 usListeners
-    :: (UpdateMode m)
+    :: forall m. (UpdateMode m)
     => m ([ListenerSpec m], OutSpecs)
 usListeners = liftM2 mappendPair
-                (relayListeners proposalProxy)
-                (relayListeners voteProxy)
+                (relayListeners proposalProxy noOpRelayLogCallback)
+                (relayListeners voteProxy noOpRelayLogCallback)
 
 usStubListeners
     :: (WithLogger m)
