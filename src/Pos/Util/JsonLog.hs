@@ -18,40 +18,42 @@ module Pos.Util.JsonLog
        , fromJLSlotId
        , JsonLogFilePathBox
        , usingJsonLogFilePath
+       , noOpRelayLogCallback
        ) where
 
-import           Control.Concurrent.MVar  (withMVar)
-import           Control.Lens             (iso)
-import           Control.Monad.Fix        (MonadFix)
-import           Control.Monad.Trans      (MonadTrans (..))
-import           Data.Aeson               (encode, FromJSON (..), withObject, (.:),
-                                           (.:?), genericParseJSON)
-import           Data.Aeson.TH            (deriveJSON, deriveToJSON)
-import qualified Data.ByteString.Lazy     as LBS
-import           Formatting               (sformat)
-import           Mockable                 (liftMockableWrappedM, MFunctor')
-import           Mockable.Channel         (ChannelT)
-import           Mockable.Class           (Mockable (..))
-import           Mockable.Concurrent      (ThreadId, Promise)
-import           Mockable.Metrics         (Counter, Distribution, Gauge)
-import           Mockable.SharedAtomic    (SharedAtomicT)
-import           Mockable.SharedExclusive (SharedExclusiveT)
-import           Serokell.Aeson.Options   (defaultOptions)
-import           Serokell.Util.Lens       (WrappedM (..))
-import           System.IO                (hClose)
-import           System.Wlog              (CanLog)
-import           Universum                hiding (modify)
+import           Control.Concurrent.MVar       (withMVar)
+import           Control.Lens                  (iso)
+import           Control.Monad.Fix             (MonadFix)
+import           Control.Monad.Trans           (MonadTrans (..))
+import           Data.Aeson                    (encode, FromJSON (..), withObject, (.:),
+                                                (.:?), genericParseJSON)
+import           Data.Aeson.TH                 (deriveJSON, deriveToJSON)
+import qualified Data.ByteString.Lazy          as LBS
+import           Formatting                    (sformat)
+import           Mockable                      (liftMockableWrappedM, MFunctor')
+import           Mockable.Channel              (ChannelT)
+import           Mockable.Class                (Mockable (..))
+import           Mockable.Concurrent           (ThreadId, Promise)
+import           Mockable.Metrics              (Counter, Distribution, Gauge)
+import           Mockable.SharedAtomic         (SharedAtomicT)
+import           Mockable.SharedExclusive      (SharedExclusiveT)
+import           Serokell.Aeson.Options        (defaultOptions)
+import           Serokell.Util.Lens            (WrappedM (..))
+import           System.IO                     (hClose)
+import           System.Wlog                   (CanLog)
+import           Universum                     hiding (modify)
 
-import           Pos.Binary.Block         ()
-import           Pos.Binary.Core          ()
+import           Pos.Binary.Block              ()
+import           Pos.Binary.Core               ()
 import           Pos.Communication.Relay.Logic (InvReqDataFlowLog)
-import           Pos.Crypto               (Hash, hash, hashHexF)
-import           Pos.Ssc.Class.Types      (Ssc)
-import           Pos.Types                (BiSsc, Block, SlotId (..), blockHeader, blockTxs,
-                                           epochIndexL, gbHeader, gbhPrevBlock, headerHash,
-                                           headerSlot)
-import           Pos.Txp.MemState.Types   (MemPoolModifyReason (Custom, Unknown))
-import           Pos.Util.TimeWarp        (currentTime)
+import           Pos.Communication.Types.Relay (RelayLogEvent, RelayLogCallback)
+import           Pos.Crypto                    (Hash, hash, hashHexF)
+import           Pos.Ssc.Class.Types           (Ssc)
+import           Pos.Types                     (BiSsc, Block, SlotId (..), blockHeader, blockTxs,
+                                                epochIndexL, gbHeader, gbhPrevBlock, headerHash,
+                                                headerSlot)
+import           Pos.Txp.MemState.Types        (MemPoolModifyReason (Custom, Unknown))
+import           Pos.Util.TimeWarp             (currentTime)
 
 type BlockId = Text
 type TxId = Text
@@ -109,6 +111,7 @@ data JLEvent = JLCreatedBlock JLBlock
              | JLTxSent JLTxS
              | JLTxReceived JLTxR 
              | JLMemPoolEvent JLMemPool
+             | JLRelayEvent RelayLogEvent
   deriving (Show, Generic)
 
 -- | 'JLEvent' with 'Timestamp' -- corresponding time of this event.
@@ -146,7 +149,7 @@ instance FromJSON JLEvent where
                      , jlmModify = modify
                      , jlmSizeBefore = sizeBefore
                      , jlmSizeAfter = sizeAfter
-                     , jlmAllocated = maybe 0 identity mAllocated
+                     , jlmAllocated = fromMaybe 0 mAllocated
                      }
              )
          -- First iteration of JLMemPoolEvent: only the mempool size was recorded.
@@ -203,6 +206,9 @@ class Monad m => MonadJL m where
 instance {-# OVERLAPPABLE #-}
     (MonadJL m, MonadTrans t, Monad (t m)) =>
         MonadJL (t m)
+
+noOpRelayLogCallback :: Monad m => RelayLogCallback m
+noOpRelayLogCallback = const $ return ()
 
 ---------------------------------------------------------------
 -- JsonLogFilePathBox monad transformer

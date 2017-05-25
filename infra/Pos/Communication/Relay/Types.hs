@@ -9,6 +9,7 @@ module Pos.Communication.Relay.Types
        ) where
 
 import           Control.Concurrent.STM        (TBQueue)
+import           Data.Time.Units               (Microsecond)
 import           Node.Message                  (Message)
 import           Universum
 
@@ -35,7 +36,7 @@ data SomeInvMsg =
         => SomeInvMsg !tag !key !contents
 
 -- | Queue of InvMsges which should be propagated.
-type RelayInvQueue = TBQueue SomeInvMsg
+type RelayInvQueue = TBQueue (Microsecond, SomeInvMsg)
 
 data RelayContext = RelayContext
     { _rlyIsPropagation    :: !Bool

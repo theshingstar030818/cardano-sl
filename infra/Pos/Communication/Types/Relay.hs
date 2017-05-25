@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pos.Communication.Types.Relay
        ( InvMsg (..)
@@ -6,9 +7,12 @@ module Pos.Communication.Types.Relay
        , MempoolMsg (..)
        , DataMsg (..)
        , InvOrData
+       , RelayLogEvent (..)
+       , RelayLogCallback
        ) where
 
 import           Control.Lens        (Wrapped (..), iso)
+import           Data.Aeson.TH       (deriveJSON, defaultOptions)
 import qualified Data.Text.Buildable as B
 import           Formatting          (bprint, build, (%))
 import           Universum
@@ -54,3 +58,12 @@ instance (Buildable contents) =>
 instance Wrapped (DataMsg contents) where
     type Unwrapped (DataMsg contents) = contents
     _Wrapped' = iso dmContents DataMsg
+
+data RelayLogEvent =
+      RelayQueueFull
+    | EnqueueDequeueTime !Integer
+    deriving Show
+
+$(deriveJSON defaultOptions ''RelayLogEvent)
+
+type RelayLogCallback m = RelayLogEvent -> m ()

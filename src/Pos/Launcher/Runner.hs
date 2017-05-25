@@ -51,6 +51,7 @@ import           System.IO                   (hClose, hSetBuffering,
 import           System.Random               (newStdGen)
 import qualified System.Remote.Monitoring    as Monitoring
 import qualified System.Metrics              as Metrics
+import qualified System.Metrics.Counter      as Metrics.Counter
 import qualified System.Metrics.Gauge        as Metrics.Gauge
 import           System.Wlog                 (LoggerConfig (..), WithLogger, logError,
                                               logInfo, logDebug, productionB,
@@ -139,7 +140,7 @@ runRawRealMode peerId transport np@NodeParams {..} sscnp listeners outSpecs (Act
             modernDBs <- openNodeDBs npRebuildDb npDbPathM
             let allWorkersNum = allWorkersCount @ssc @(ProductionMode ssc) :: Int
             -- TODO [CSL-775] ideally initialization logic should be in scenario.
-            runCH @ssc jlVar allWorkersNum np initNC modernDBs $ initNodeDBs
+            runCH @ssc jlVar allWorkersNum np initNC modernDBs (return ()) (const $ return ()) initNodeDBs 
             initTip <- runDBHolder modernDBs getTip
             stateM <- liftIO SM.newIO
             stateM_ <- liftIO SM.newIO
@@ -158,7 +159,8 @@ runRawRealMode peerId transport np@NodeParams {..} sscnp listeners outSpecs (Act
             ekgMemPoolWaitTime <- liftIO $ Metrics.createGauge (pack "MemPoolWaitTime") ekgStore
             ekgMemPoolModifyTime <- liftIO $ Metrics.createGauge (pack "MemPoolModifyTime") ekgStore
             ekgMemPoolQueueLength <- liftIO $ Metrics.createGauge (pack "MemPoolQueueLength") ekgStore
-
+            ekgRelayQueueFull <- liftIO $ Metrics.createCounter (pack "RelayQueueFull") ekgStore
+            ekgRelayQueueEnqueueDequeueTime <- liftIO $ Metrics.createGauge (pack "RelayQueueEnqueueDequeueTime") ekgStore
 
             -- An exponential moving average is used for the time gauges (wait
             -- and modify durations). The parameter alpha is chosen somewhat
@@ -197,12 +199,14 @@ runRawRealMode peerId transport np@NodeParams {..} sscnp listeners outSpecs (Act
                           liftIO $ Metrics.Gauge.set ekgMemPoolModifyTime new
                           logDebug $ sformat ("MemPool metrics release: modify time was "%shown%" size is "%shown) timeElapsed memPoolSize
                     }
+                onRelayQueueFull = Metrics.Counter.inc ekgRelayQueueFull
+                onRelayQueueDequeue = Metrics.Gauge.set ekgRelayQueueEnqueueDequeueTime . fromIntegral
 
             -- TODO [CSL-775] need an effect-free way of running this into IO.
             let runIO :: forall t . RawRealMode ssc t -> IO t
                 runIO = runProduction .
                         usingLoggerName lpRunnerTag .
-                        runCH @ssc jlVar allWorkersNum np initNC modernDBs .
+                        runCH @ssc jlVar allWorkersNum np initNC modernDBs onRelayQueueFull onRelayQueueDequeue.
                         runSlottingHolder slottingVar .
                         runNtpSlotting (npUseNTP, ntpSlottingVar) .
                         ignoreSscHolder .
@@ -246,7 +250,7 @@ runRawRealMode peerId transport np@NodeParams {..} sscnp listeners outSpecs (Act
                     then return $ Just lowerDelay
                     else return $ Just upperDelay
 
-            runCH jlVar allWorkersNum np initNC modernDBs .
+            runCH jlVar allWorkersNum np initNC modernDBs onRelayQueueFull onRelayQueueDequeue .
                 runSlottingHolder slottingVar .
                 runNtpSlotting (npUseNTP, ntpSlottingVar) .
                 (mkStateAndRunSscHolder @ssc) .
@@ -420,9 +424,11 @@ runCH :: forall ssc m a .
       -> NodeParams 
       -> SscNodeContext ssc 
       -> NodeDBs 
+      -> IO ()
+      -> (Integer -> IO ())
       -> DBHolder (ContextHolder ssc m) a 
       -> m a
-runCH mJLHandle allWorkersNum params@NodeParams {..} sscNodeContext db act = do
+runCH mJLHandle allWorkersNum params@NodeParams {..} sscNodeContext db onRelayQueueFull onRelayQueueDequeue act = do
     ncLoggerConfig <- getRealLoggerConfig $ bpLoggingParams npBaseParams
     ncBlkSemaphore <- newEmptyMVar
     ucUpdateSemaphore <- newEmptyMVar
@@ -465,6 +471,8 @@ runCH mJLHandle allWorkersNum params@NodeParams {..} sscNodeContext db act = do
             , ncUpdateContext = UpdateContext {..}
             , ncNodeParams = params
             , ncSendLock = Nothing
+            , ncOnRelayQueueFull = onRelayQueueFull
+            , ncOnRelayDequeue = onRelayQueueDequeue
 #ifdef WITH_EXPLORER
             , ncTxpGlobalSettings = explorerTxpGlobalSettings
 #else
