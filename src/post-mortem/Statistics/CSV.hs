@@ -3,31 +3,63 @@ module Statistics.CSV
     , focusToCSV
     ) where
 
-import           System.IO        (hPutStrLn)
-import qualified Data.Text        as T
+import           Control.Monad.Random   (MonadRandom (..), evalRandT)
+import           System.IO              (hPutStrLn)
+import           System.Random          (mkStdGen)
+import qualified Data.Text              as T
+import           Data.Time.Units        (Microsecond)
 
-import           Statistics.Focus (Focus (..))
-import           Pos.Util.JsonLog (JLMemPool (..))
+import           Statistics.Focus       (Focus (..))
+import           Pos.Txp.MemState.Types (MemPoolModifyReason (..))
+import           Pos.Util.JsonLog       (JLMemPool (..))
 import           Types
 import           Universum
 
 txCntInChainMemPoolToCSV :: FilePath 
+                         -> Double
                          -> [(NodeIndex, Timestamp, Int)] 
                          -> [(NodeIndex, Timestamp, JLMemPool)] 
+                         -> [(NodeIndex, Timestamp)]
+                         -> [(NodeIndex, Timestamp, Microsecond)]
                          -> IO ()
-txCntInChainMemPoolToCSV f txCnt mp = withFile f WriteMode $ \h -> do
-    hPutStrLn h "time,txCount,txType,node"
-    for_ txCnt $ \(n, ts, cnt) -> csvLine h "written" n ts (fromIntegral cnt)
-    for_ mp $ \(n, ts, p@JLMemPool{..}) -> do
-        csvLine h (toTxType "Wait" p) n ts jlmWait
-        csvLine h (toTxType "Modify" p) n ts jlmModify
-        csvLine h (toTxType "SizeAfter" p) n ts (fromIntegral jlmSizeAfter)
+txCntInChainMemPoolToCSV f sp txCnt mp fulls waits = 
+    flip evalRandT (mkStdGen 918273) $ liftIO $ withFile f WriteMode $ \h -> do
+        hPutStrLn h "time,txCount,txType,node"
+        for_ txCnt $ \(n, ts, cnt) -> csvLine h "written" n ts (fromIntegral cnt)
+        for_ mp $ \(n, ts, p@JLMemPool{..}) ->
+            whenM (inSample jlmReason) $ do
+                csvLine h (toTxType "Wait" p) n ts jlmWait
+                csvLine h (toTxType "Modify" p) n ts jlmModify
+                csvLine h (toTxType "SizeAfter" p) n ts (fromIntegral jlmSizeAfter)
+        foldM_ (foldFull h) 0 fulls
+        for_ waits $ \(n, ts, t) ->
+            whenM draw $ csvLine h "relay_wait" n ts (fromIntegral t)
   where
-    csvLine :: Handle -> String -> NodeIndex -> Timestamp -> Integer -> IO ()
-    csvLine h txType node time txCount = hPutStrLn h $ show time ++ "," ++ show txCount ++ "," ++ txType ++ "," ++ show node
-    
+    csvLine :: MonadIO m => Handle -> String -> NodeIndex -> Timestamp -> Integer -> m ()
+    csvLine h txType node time txCount = liftIO $ hPutStrLn h $ show time ++ "," ++ show txCount ++ "," ++ txType ++ "," ++ show node
+  
+    draw :: MonadRandom m => m Bool
+    draw = (<= sp) <$> getRandomR (0, 1)
+
+    inSample :: MonadRandom m => MemPoolModifyReason -> m Bool
+    inSample (ProcessTransaction _) = draw
+    inSample _                      = return True
+
     toTxType :: String -> JLMemPool -> String
-    toTxType s JLMemPool{..} = "mp_" ++ show jlmReason ++ "_" ++ s
+    toTxType s JLMemPool{..} =
+        let reason = case jlmReason of
+                ApplyBlock           -> "ApplyBlock"
+                CreateBlock          -> "CreateBlock"
+                ProcessTransaction _ -> "ProcessTransaction"
+                Custom t             -> toString t
+                Unknown              -> "Unknown"
+        in  "mp_" ++ reason ++ "_" ++ s
+
+    foldFull :: (MonadRandom m, MonadIO m) => Handle -> Integer -> (NodeIndex, Timestamp) -> m Integer
+    foldFull h cnt (n, ts) = do
+        let cnt' = succ cnt
+        whenM draw $ csvLine h "relay_full" n ts cnt'
+        return cnt'
 
 focusToCSV :: FilePath -> [(Timestamp, NodeIndex, Focus)] -> IO ()
 focusToCSV f xs = withFile f WriteMode $ \h -> do
