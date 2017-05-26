@@ -53,10 +53,10 @@ ntpMaxError: 120000000 # 2 mins
 maxLocalTxs: 10000
 protocolMagic: 0
 enhancedMessageTimeout: 10
-enhancedMessageBroadcast: 10
+enhancedMessageBroadcast: 5
 messageCacheTimeout: 30
 blockRetrievalQueueSize: 100
-propagationQueueSize: 100
+propagationQueueSize: 0
 recoveryHeadersMessage: 20 # should be greater than k
 
 # Time slave/lord
