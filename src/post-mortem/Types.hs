@@ -6,10 +6,11 @@ module Types
     , NodeIndex
     ) where
 
+import Data.Time.Units (Microsecond)
 import Universum
 
 type TxHash = Text
 type BlockHash = Text
-type Timestamp = Integer
+type Timestamp = Microsecond
 type Slot = (Word64, Word16)
 type NodeIndex = Int

@@ -16,6 +16,7 @@ import qualified Data.Map.Lazy    as ML
 import           Data.Maybe       (fromJust, isJust)
 import qualified Data.Set         as S
 import qualified Data.Text        as T
+import           Data.Time.Units  (Microsecond)
 
 import           JSONLog          (IndexedJLTimedEvent (..))
 import           Pos.Util.JsonLog (JLEvent (..), JLBlock (..))
@@ -87,12 +88,18 @@ blockChainF = blockChain <$> blockHeadersF
 txBlocksF :: Fold IndexedJLTimedEvent (SMap TxHash [(Timestamp, BlockHash)])
 txBlocksF = Fold step MS.empty id
   where
-    step :: SMap Text [(Integer, Text)] -> IndexedJLTimedEvent -> SMap Text [(Integer, Text)]
+    step :: SMap Text [(Microsecond, Text)] 
+         -> IndexedJLTimedEvent 
+         -> SMap Text [(Microsecond, Text)]
     step m IndexedJLTimedEvent{..} = case ijlEvent of
         JLCreatedBlock JLBlock{..} -> foldl' (f ijlTimestamp jlHash) m [T.take 8 x | x <- jlTxs]
         _                          -> m
 
-    f :: Integer -> Text -> SMap Text [(Integer, Text)] -> Text -> SMap Text [(Integer, Text)]
+    f :: Timestamp 
+      -> Text 
+      -> SMap Text [(Timestamp, Text)] 
+      -> Text 
+      -> SMap Text [(Timestamp, Text)]
     f ts h m tx = let y = (ts, h)
                   in  MS.alter (Just . maybe [y] (y :)) tx m
 

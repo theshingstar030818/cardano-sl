@@ -56,6 +56,7 @@ library
                         Pos.Context
                         Pos.CompileConfig
                         Pos.Communication
+                        Pos.Communication.Types
                         Pos.Constants
                         Pos.Crypto.Arbitrary
 
@@ -106,6 +107,7 @@ library
                         -- Txp
                         Pos.Txp
                         Pos.Txp.Core
+                        Pos.Txp.MemState.Types
                         Pos.Txp.Settings
 
                         Pos.Types
@@ -198,7 +200,6 @@ library
                         Pos.Launcher.Scenario
 
                         -- Network
-                        Pos.Communication.Types
                         Pos.Communication.Message
                         Pos.Communication.Methods
                         Pos.Communication.Tx
@@ -294,7 +295,6 @@ library
                         Pos.Txp.MemState
                         Pos.Txp.MemState.Class
                         Pos.Txp.MemState.Holder
-                        Pos.Txp.MemState.Types
                         Pos.Txp.Network
                         Pos.Txp.Network.Listeners
                         Pos.Txp.Network.Types
@@ -1331,6 +1331,7 @@ executable cardano-post-mortem
                      , Statistics.Histogram
                      , Statistics.MemPool
                      , Statistics.Report
+                     , Statistics.Relay
                      , Statistics.Tx
                      , Types
                      , Util.Aeson
@@ -1348,12 +1349,15 @@ executable cardano-post-mortem
                      , fgl
                      , graphviz
                      , foldl
+                     , MonadRandom
                      , optparse-applicative
                      , pipes
                      , pipes-bytestring
                      , pipes-interleave
                      , pipes-safe
+                     , random
                      , text
+                     , time-units
                      , turtle
                      , universum >= 0.1.11
   default-language:    Haskell2010

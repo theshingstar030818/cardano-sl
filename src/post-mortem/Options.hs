@@ -9,15 +9,19 @@ import Types
 import Universum
 
 data Options =
-      Overview ![FilePath]
+      Overview !Double ![FilePath]
     | Focus !TxHash !FilePath
     | TxRelay ![FilePath]
 
 overviewOptions :: Parser Options
-overviewOptions = Overview <$> (some (argument str 
-    (  metavar "LOGDIRS..."
-    <> help "directories containing the log files"
-    )))
+overviewOptions = Overview <$> (toProb <$> argument auto
+                                (  metavar "SAMPLEPROB"
+                                <> help "sample probability for frequent events"
+                                ))
+                           <*> (some (argument str 
+                                (  metavar "LOGDIRS..."
+                                <> help "directories containing the log files"
+                                )))
 
 focusedOptions :: Parser Options
 focusedOptions = Focus <$> (toText <$> argument str
@@ -48,3 +52,6 @@ parseOptions = execParser $ info (options <**> helper)
     <> progDesc "analyzes the json logs from several directories or focusses on a single transaction"
     <> header "cardano-post-mortem"
     )
+
+toProb :: Double -> Double
+toProb = min 1 . max 0

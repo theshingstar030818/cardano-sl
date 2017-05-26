@@ -13,30 +13,38 @@ main :: IO ()
 main = do
     opts <- parseOptions
     case opts of
-        Overview logDirs    -> do
+        Overview sampleProb logDirs -> do
             err "logs directories: "
             for_ logDirs $ \d -> err $ " - " ++ show d
+            err $ "sample probability: " ++ show sampleProb
             err ""
-            xs <- forM logDirs processLogDirOverview
+            xs <- forM logDirs $ flip processLogDirOverview sampleProb
             chart xs "times.svg"
             err "wrote times chart"
-        Focus txHash logDir -> do
+        Focus txHash logDir         -> do
             err $ "transaction hash: " ++ show txHash
             err $ "logs directory: " ++ show logDir 
             let focusFile = ("focus_" ++ extractName logDir ++ "_" ++ toString txHash) <.> "csv"
             runJSONFold logDir (focusF txHash) >>= focusToCSV focusFile
             err $ "wrote result to " ++ show focusFile
-        TxRelay logDirs     -> do
+        TxRelay logDirs             -> do
             err "logs directories: "
             for_ logDirs $ \d -> err $ " - " ++ show d
             err ""
             for_ logDirs processLogDirTxRelay
 
-processLogDirOverview :: FilePath -> IO (String, Map TxHash (Maybe Timestamp))
-processLogDirOverview logDir = do
+processLogDirOverview :: FilePath -> Double -> IO (String, Map TxHash (Maybe Timestamp))
+processLogDirOverview logDir sampleProb = do
     err $ "processing log directory " ++ show logDir ++ " ..."
 
-    (rc, g, mp, cr, ft) <- runJSONFold logDir $ (,,,,) <$> receivedCreatedF <*> graphF <*> memPoolF <*> txCntInChainF <*> txFateF
+    (rc, g, mp, cr, ft, fulls, waits) <- 
+        runJSONFold logDir $ (,,,,,,) <$> receivedCreatedF 
+                                      <*> graphF 
+                                      <*> memPoolF 
+                                      <*> txCntInChainF 
+                                      <*> txFateF
+                                      <*> relayQueueFullF
+                                      <*> relayEnqueueDequeueTimeF
     let total    = M.size rc
         included = sort $ mapMaybe snd $ M.toList rc
         lost     = total - length included
@@ -52,7 +60,7 @@ processLogDirOverview logDir = do
     when b $ err $ "wrote graph png to " ++ show graphFile
 
     let csvFile = getName "csv" dirName "csv"
-    txCntInChainMemPoolToCSV csvFile cr mp
+    txCntInChainMemPoolToCSV csvFile sampleProb cr mp fulls waits
     err $ "wrote csv file to " ++ show csvFile
 
     let reportFile = getName "report" dirName "txt"

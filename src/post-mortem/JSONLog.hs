@@ -57,6 +57,6 @@ runParseLogs logDir f = do
     producer :: Int -> Handle -> Producer IndexedJLTimedEvent IO ()
     producer n h = parseLogP h >-> P.map (\JLTimedEvent{..} ->
         IndexedJLTimedEvent { ijlNode      = n
-                            , ijlTimestamp = jlTimestamp
+                            , ijlTimestamp = fromIntegral jlTimestamp
                             , ijlEvent     = jlEvent
                             })
