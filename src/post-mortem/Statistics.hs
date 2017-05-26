@@ -9,6 +9,7 @@ module Statistics
     , module Statistics.Histogram
     , module Statistics.MemPool
     , module Statistics.Report
+    , module Statistics.Relay
     , module Statistics.Tx
     ) where
 
@@ -25,6 +26,7 @@ import Statistics.Graph
 import Statistics.Histogram
 import Statistics.MemPool
 import Statistics.Report
+import Statistics.Relay
 import Statistics.Tx
 import Types
 import Universum
