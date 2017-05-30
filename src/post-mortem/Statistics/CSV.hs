@@ -6,6 +6,8 @@ module Statistics.CSV
 import           Control.Monad.Random   (MonadRandom (..), evalRandT)
 import           System.IO              (hPutStrLn)
 import           System.Random          (mkStdGen)
+import           Data.IntMap.Strict     (IntMap)
+import qualified Data.IntMap.Strict     as I
 import qualified Data.Text              as T
 import           Data.Time.Units        (Microsecond)
 
@@ -31,7 +33,7 @@ txCntInChainMemPoolToCSV f sp txCnt mp fulls waits =
                 csvLine h (toTxType "Wait" p) n ts jlmWait
                 csvLine h (toTxType "Modify" p) n ts jlmModify
                 csvLine h (toTxType "SizeAfter" p) n ts (fromIntegral jlmSizeAfter)
-        foldM_ (foldFull h) 0 fulls
+        foldM_ (foldFull h) I.empty fulls
         for_ waits $ \(n, ts, t) ->
             whenM draw $ csvLine h "relay_wait" n ts (fromIntegral t)
   where
@@ -55,11 +57,11 @@ txCntInChainMemPoolToCSV f sp txCnt mp fulls waits =
                 Unknown              -> "Unknown"
         in  "mp_" ++ reason ++ "_" ++ s
 
-    foldFull :: (MonadRandom m, MonadIO m) => Handle -> Integer -> (NodeIndex, Timestamp) -> m Integer
-    foldFull h cnt (n, ts) = do
-        let cnt' = succ cnt
-        whenM draw $ csvLine h "relay_full" n ts cnt'
-        return cnt'
+    foldFull :: (MonadRandom m, MonadIO m) => Handle -> IntMap Integer -> (NodeIndex, Timestamp) -> m (IntMap Integer)
+    foldFull h cnts (n, ts) = do
+        let cnts' = I.insertWith (+) n 1 cnts
+        whenM draw $ csvLine h "relay_full" n ts (cnts' I.! n)
+        return cnts'
 
 focusToCSV :: FilePath -> [(Timestamp, NodeIndex, Focus)] -> IO ()
 focusToCSV f xs = withFile f WriteMode $ \h -> do
