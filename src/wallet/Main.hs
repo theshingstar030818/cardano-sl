@@ -111,7 +111,7 @@ runCmd sendActions (Send idx outputs) = do
     case etx of
         Left err -> putText $ sformat ("Error: "%stext) err
         Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
-runCmd sendActions (SendToAllGenesis nTrans conc delay_ cooldown sendMode tpsSentFile) = do
+runCmd sendActions (SendToAllGenesis duration conc delay_ cooldown sendMode tpsSentFile) = do
     (skeys, na) <- ask
     let nNeighbours = length na
     let slotDuration = fromIntegral (toMicroseconds genesisSlotDuration) `div` 1000000 :: Int
@@ -127,7 +127,7 @@ runCmd sendActions (SendToAllGenesis nTrans conc delay_ cooldown sendMode tpsSen
                                                , "cooldown=" <> (T.pack . show) cooldown]
     liftIO $ T.hPutStrLn h "time,txCount,txType"
     txQueue <- liftIO . atomically $ newTQueue
-    forM_ (zip skeys [0 .. nTrans-1]) $ \(key, n) -> do
+    forM_ (zip skeys [0..]) $ \(key, n) -> do
         let txOut = TxOut {
                 txOutAddress = makePubKeyAddress (toPublic key),
                 txOutValue = mkCoin 1
@@ -173,9 +173,10 @@ runCmd sendActions (SendToAllGenesis nTrans conc delay_ cooldown sendMode tpsSen
             Nothing -> return ()
     putStr $ unwords ["Sending", show (length skeys), "transactions"]
     let sendTxsConcurrently = void $ forConcurrently [1..conc] (const sendTxs)
+    let sendTxsConcurrentlyFor n = race (delay (sec n)) sendTxsConcurrently
     either absurd identity <$> race
         writeTPS
-        (sendTxsConcurrently >> delay (sec $ cooldown * slotDuration))
+        (sendTxsConcurrentlyFor duration >> delay (sec $ cooldown * slotDuration))
     liftIO $ hClose h
 runCmd sendActions v@(Vote idx decision upid) = do
     logDebug $ "Submitting a vote :" <> show v
@@ -241,7 +242,7 @@ runCmd _ Help = do
             , "   balance <address>              -- check balance on given address (may be any address)"
             , "   send <N> [<address> <coins>]+  -- create and send transaction with given outputs"
             , "                                     from own address #N"
-            , "   send-to-all-genesis <nTrans> <conc> <delay> <cooldown> <sendmode> -- create and send nTrans transactions from all genesis addresses, delay in ms.  conc is the number of threads that send transactions concurrently. sendmode can be one of \"neighbours\", \"round-robin\", and \"send-random\".  After all transactions are being sent, wait for cooldown slots to give the system time to cool down."
+            , "   send-to-all-genesis <duration> <conc> <delay> <cooldown> <sendmode> <csvfile> -- create and send transactions from all genesis addresses for <duration> seconds, delay in ms.  conc is the number of threads that send transactions concurrently. sendmode can be one of \"neighbours\", \"round-robin\", and \"send-random\".  After all transactions are being sent, wait for cooldown slots to give the system time to cool down."
             , "                                     to themselves with the given amount of coins"
             , "   vote <N> <decision> <upid>     -- send vote with given hash of proposal id (in base64) and"
             , "                                     decision, from own address #N"
