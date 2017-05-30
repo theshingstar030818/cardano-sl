@@ -36,7 +36,7 @@ txCntInChainMemPoolToCSV f sp txCnt mp fulls waits =
             whenM draw $ csvLine h "relay_wait" n ts (fromIntegral t)
   where
     csvLine :: MonadIO m => Handle -> String -> NodeIndex -> Timestamp -> Integer -> m ()
-    csvLine h txType node time txCount = liftIO $ hPutStrLn h $ show time ++ "," ++ show txCount ++ "," ++ txType ++ "," ++ show node
+    csvLine h txType node time txCount = liftIO $ hPutStrLn h $ show (fromIntegral time :: Integer) ++ "," ++ show txCount ++ "," ++ txType ++ "," ++ show node
   
     draw :: MonadRandom m => m Bool
     draw = (<= sp) <$> getRandomR (0, 1)
