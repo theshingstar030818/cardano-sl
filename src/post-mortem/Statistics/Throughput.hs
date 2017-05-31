@@ -39,7 +39,7 @@ throughput f w cnt xs ys =
         _                    -> Nothing
 
 grid :: FilePath -> [(Double, Double)] -> [(Double, Double)] -> IO ()
-grid f xs ys = void $ renderableToFile def f $ gridToRenderable $ chart1 `above` chart2
+grid f xs ys = void $ renderableToFile def f $ fillBackground def $ gridToRenderable $ chart1 `above` chart2
   where
     g = layoutToGrid . execEC
     
