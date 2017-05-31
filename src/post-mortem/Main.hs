@@ -63,7 +63,7 @@ processLogDirOverview logDir sampleProb = do
     err $ "mem pool entries: " ++ show (length mp)
 
     let dirName   = extractName logDir
-    let graphFile = getName "graph" dirName "png"
+    let graphFile = getName "graph" dirName "svg"
     b <- writeGraph graphFile g
     when b $ err $ "wrote graph png to " ++ show graphFile
 
@@ -101,9 +101,9 @@ processLogDirThroughput window logDir = do
     (xs, ys) <- runJSONFold logDir $ (,) <$> txCntInChainF <*> memPoolF
     err $ "chain length: " ++ show (length xs) ++ " block(s)"
     err $ show (length ys) ++ " mem pool event(s)"
-    let pngFile = getName "throughput" (extractName logDir) "png"
-    throughput pngFile window 1000 xs ys
-    err $ "wrote chart to " ++ show pngFile
+    let svgFile = getName "throughput" (extractName logDir) "svg"
+    throughput svgFile window 1000 xs ys
+    err $ "wrote chart to " ++ show svgFile
 
 err :: String -> IO ()
 err = hPutStrLn stderr
