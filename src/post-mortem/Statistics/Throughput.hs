@@ -17,29 +17,38 @@ import           Universum
 
 throughput :: FilePath 
            -> Double 
+           -> Double
            -> Int
            -> [(NodeIndex, Timestamp, Int)] 
            -> [(NodeIndex, Timestamp, JLMemPool)] 
+           -> [(NodeIndex, Timestamp, Microsecond)]
            -> IO ()
-throughput f w cnt xs ys =
+throughput f txW waitW cnt xs ys zs =
     let xs'    = [(t, c) | (_, t, c) <- xs]
         ys'    = mapMaybe wait ys
-        times  = map fst xs' ++ map fst ys'
+        zs'    = [(t, w) | (_, t, w) <- zs]
+        times  = map fst xs' ++ map fst ys' ++ map fst zs'
         tmin   = minimum times
         tmax   = maximum times
-        step   = (tmax - tmin) `div` fromIntegral cnt
-        times' = [tmin, tmin + step .. tmax]
-        xs''   = scaleShift tmin $ sliding w times' (\zs -> fromIntegral (sum zs) / w) xs'
-        ys''   = scaleShift tmin $ sliding w times' average                            ys'
-    in  grid f xs'' ys''
+        times' = sample tmin tmax cnt
+        xs''   = scaleShift tmin $ sliding txW   times' (\ws -> fromIntegral (sum ws) / txW)       xs'
+        ys''   = scaleShift tmin $ sliding waitW times' ((/ 1000000) . average)                    ys'
+        zs''   = scaleShift tmin $ sliding waitW times' ((/ 1000000) . average . map fromIntegral) zs'
+    in  grid f txW waitW xs'' ys'' zs''
   where
     wait :: (NodeIndex, Timestamp, JLMemPool) -> Maybe (Timestamp, Integer)
     wait (_, t, JLMemPool{..}) = case jlmReason of
         ProcessTransaction _ -> Just (t, jlmWait)
         _                    -> Nothing
 
-grid :: FilePath -> [(Double, Double)] -> [(Double, Double)] -> IO ()
-grid f xs ys = void $ renderableToFile def f $ fillBackground def $ gridToRenderable $ chart1 `above` chart2
+grid :: FilePath 
+     -> Double 
+     -> Double 
+     -> [(Double, Double)] 
+     -> [(Double, Double)] 
+     -> [(Double, Double)] 
+     -> IO ()
+grid f txW waitW xs ys zs = void $ renderableToFile def f $ fillBackground def $ gridToRenderable $ chart1 `above` chart2 `above` chart3
   where
     g = layoutToGrid . execEC
     
@@ -47,13 +56,26 @@ grid f xs ys = void $ renderableToFile def f $ fillBackground def $ gridToRender
         setColors [opaque blue]
         layout_x_axis . laxis_title .= "time (s)"
         layout_y_axis . laxis_title .= "tx/s"
-        plot $ line "throughput" [xs]
+        plot $ line ("tx throughput (window " ++ show txW ++ "s)") [xs]
 
     chart2 = g $ do
         setColors [opaque red]
         layout_x_axis . laxis_title .= "time (s)"
-        layout_y_axis . laxis_title .= "wait (mcs)"
-        plot $ line "wait" [ys]
+        layout_y_axis . laxis_title .= "wait (s)"
+        plot $ line ("mempool wait for tx processing (window " ++ show waitW ++ "s)") [ys]
+
+    chart3 = g $ do
+        setColors [opaque green]
+        layout_x_axis . laxis_title .= "time (s)"
+        layout_y_axis . laxis_title .= "wait (s)"
+        plot $ line ("tx relay wait (window " ++ show waitW ++ "s)") [zs]
+
+sample :: Integral a => a -> a -> Int -> [a]
+sample tmin tmax cnt =
+    let tmin' = fromIntegral tmin
+        tmax' = fromIntegral tmax
+        step = (tmax' - tmin') / fromIntegral (pred cnt) :: Double
+    in  [round (tmin' + fromIntegral i * step) | i <- [0 .. pred cnt]]
 
 sliding :: Double -> [Timestamp] -> ([a] -> b) -> [(Timestamp, a)] -> [(Timestamp, b)]
 sliding _      _     _ [] = []
