@@ -12,6 +12,7 @@ data Options =
       Overview !Double ![FilePath]
     | Focus !TxHash !FilePath
     | TxRelay ![FilePath]
+    | Throughput !Double ![FilePath]
 
 overviewOptions :: Parser Options
 overviewOptions = Overview <$> (toProb <$> argument auto
@@ -39,11 +40,22 @@ txRelayOptions = TxRelay <$> (some (argument str
     <> help "directories containing the log files"
     )))
 
+throughputOptions :: Parser Options
+throughputOptions = Throughput <$> (argument auto
+                                    (  metavar "WINDOW"
+                                    <> help "time window (in seconds)"
+                                    ))
+                               <*> (some (argument str 
+                                    (  metavar "LOGDIRS..."
+                                    <> help "directories containing the log files"
+                                    )))
+
 options :: Parser Options
 options = hsubparser
-    (  command "overview" (info overviewOptions (progDesc "analyzes the json logs from LOGDIRS..."))
-    <> command "focus"    (info focusedOptions  (progDesc "analyzes transaction FOCUS in log folder LOGDIR"))
-    <> command "txrelay"  (info txRelayOptions  (progDesc "analyzes transaction relays in the json logs from LOGDIRS..."))
+    (  command "overview"   (info overviewOptions   (progDesc "analyzes the json logs from LOGDIRS..."))
+    <> command "focus"      (info focusedOptions    (progDesc "analyzes transaction FOCUS in log folder LOGDIR"))
+    <> command "txrelay"    (info txRelayOptions    (progDesc "analyzes transaction relays in the json logs from LOGDIRS..."))
+    <> command "throughput" (info throughputOptions (progDesc "analyzes transaction throughput per time WINDOW in the json logs from LOGDIRS..."))
     )
 
 parseOptions :: IO Options

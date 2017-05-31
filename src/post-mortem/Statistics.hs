@@ -10,6 +10,7 @@ module Statistics
     , module Statistics.MemPool
     , module Statistics.Report
     , module Statistics.Relay
+    , module Statistics.Throughput
     , module Statistics.Tx
     ) where
 
@@ -27,6 +28,7 @@ import Statistics.Histogram
 import Statistics.MemPool
 import Statistics.Report
 import Statistics.Relay
+import Statistics.Throughput
 import Statistics.Tx
 import Types
 import Universum

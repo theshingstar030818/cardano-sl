@@ -14,12 +14,11 @@ main = do
     opts <- parseOptions
     case opts of
         Overview sampleProb logDirs -> do
-            err "logs directories: "
-            for_ logDirs $ \d -> err $ " - " ++ show d
+            showLogDirs logDirs
             err $ "sample probability: " ++ show sampleProb
             err ""
             xs <- forM logDirs $ flip processLogDirOverview sampleProb
-            chart xs "times.svg"
+            chart xs "times.png"
             err "wrote times chart"
         Focus txHash logDir         -> do
             err $ "transaction hash: " ++ show txHash
@@ -28,10 +27,19 @@ main = do
             runJSONFold logDir (focusF txHash) >>= focusToCSV focusFile
             err $ "wrote result to " ++ show focusFile
         TxRelay logDirs             -> do
-            err "logs directories: "
-            for_ logDirs $ \d -> err $ " - " ++ show d
+            showLogDirs logDirs
             err ""
             for_ logDirs processLogDirTxRelay
+        Throughput window logDirs   -> do
+            showLogDirs logDirs
+            err $ "time window: " ++ show window
+            err ""
+            for_ logDirs $ processLogDirThroughput window
+
+showLogDirs :: [FilePath] -> IO ()
+showLogDirs logDirs = do
+    err "log directories: "
+    for_ logDirs $ \d -> err $ " - " ++ show d
 
 processLogDirOverview :: FilePath -> Double -> IO (String, Map TxHash (Maybe Timestamp))
 processLogDirOverview logDir sampleProb = do
@@ -62,11 +70,9 @@ processLogDirOverview logDir sampleProb = do
     let csvFile = getName "csv" dirName "csv"
     txCntInChainMemPoolToCSV csvFile sampleProb cr mp fulls waits
     err $ "wrote csv file to " ++ show csvFile
-
     let reportFile = getName "report" dirName "txt"
     void (reportTxFate reportFile ft)
     err $ "wrote report file to " ++ show reportFile
-
     err $ "processing log directory " ++ show logDir ++ " done"
     err ""
     return (dirName, rc) 
@@ -74,10 +80,8 @@ processLogDirOverview logDir sampleProb = do
 processLogDirTxRelay :: FilePath -> IO ()
 processLogDirTxRelay logDir = do
     err $ "processing log directory " ++ show logDir ++ " ..."
-
     m <- runJSONFold logDir txReceivedF
     err $ "total number of received transactions: " ++ show (M.size m)
-
     let xs         = sortBy (compare `on` \(_, ys) -> negate $ length ys) $ M.toList m
         dirName    = extractName logDir
         relaysFile = getName "relays" dirName "txt"
@@ -85,13 +89,21 @@ processLogDirTxRelay logDir = do
         for_ xs $ \(tx, ys) ->
             hPutStrLn h $ toString tx ++ ": " ++ show ys
     err $ "wrote relay data to " ++ show relaysFile
-
     let hist     = M.toList $ histogram $ map (length . snd) xs
         histFile = getName "histogram" dirName "txt"
     withFile histFile WriteMode $ \h ->
-        for_ hist $ \(n, c) ->
-            hPrintf h "%4d:%6d\n" n c
+        for_ hist $ uncurry $ hPrintf h "%4d:%6d\n"
     err $ "wrote histogram to " ++ show histFile
+
+processLogDirThroughput :: Double -> FilePath -> IO ()
+processLogDirThroughput window logDir = do
+    err $ "processing log directory " ++ show logDir ++ " ..."
+    (xs, ys) <- runJSONFold logDir $ (,) <$> txCntInChainF <*> memPoolF
+    err $ "chain length: " ++ show (length xs) ++ " block(s)"
+    err $ show (length ys) ++ " mem pool event(s)"
+    let pngFile = getName "throughput" (extractName logDir) "png"
+    throughput pngFile window 1000 xs ys
+    err $ "wrote chart to " ++ show pngFile
 
 err :: String -> IO ()
 err = hPutStrLn stderr
