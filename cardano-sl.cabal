@@ -1331,6 +1331,7 @@ executable cardano-post-mortem
                      , Statistics.MemPool
                      , Statistics.Report
                      , Statistics.Relay
+                     , Statistics.Throughput
                      , Statistics.Tx
                      , Types
                      , Util.Aeson
