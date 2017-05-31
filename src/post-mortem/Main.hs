@@ -30,11 +30,12 @@ main = do
             showLogDirs logDirs
             err ""
             for_ logDirs processLogDirTxRelay
-        Throughput window logDirs   -> do
+        Throughput txWindow waitWindow logDirs   -> do
             showLogDirs logDirs
-            err $ "time window: " ++ show window
+            err $ "tx window: " ++ show txWindow
+            err $ "wait window: " ++ show waitWindow
             err ""
-            for_ logDirs $ processLogDirThroughput window
+            for_ logDirs $ processLogDirThroughput txWindow waitWindow
 
 showLogDirs :: [FilePath] -> IO ()
 showLogDirs logDirs = do
@@ -95,14 +96,15 @@ processLogDirTxRelay logDir = do
         for_ hist $ uncurry $ hPrintf h "%4d:%6d\n"
     err $ "wrote histogram to " ++ show histFile
 
-processLogDirThroughput :: Double -> FilePath -> IO ()
-processLogDirThroughput window logDir = do
+processLogDirThroughput :: Double -> Double -> FilePath -> IO ()
+processLogDirThroughput txWindow waitWindow logDir = do
     err $ "processing log directory " ++ show logDir ++ " ..."
-    (xs, ys) <- runJSONFold logDir $ (,) <$> txCntInChainF <*> memPoolF
+    (xs, ys, zs) <- runJSONFold logDir $ (,,) <$> txCntInChainF <*> memPoolF <*> relayEnqueueDequeueTimeF
     err $ "chain length: " ++ show (length xs) ++ " block(s)"
     err $ show (length ys) ++ " mem pool event(s)"
+    err $ show (length zs) ++ " relay waiting events"
     let svgFile = getName "throughput" (extractName logDir) "svg"
-    throughput svgFile window 1000 xs ys
+    throughput svgFile txWindow waitWindow 1000 xs ys zs
     err $ "wrote chart to " ++ show svgFile
 
 err :: String -> IO ()
