@@ -37,14 +37,15 @@ import           Universum
 
 import           Pos.Binary                 (Raw)
 import qualified Pos.CLI                    as CLI
+import           Pos.Client.Txp.Util        (createTx)
 import           Pos.Communication          (NodeId, OutSpecs, SendActions, Worker',
-                                             WorkerSpec, sendTxOuts, submitTx, worker)
+                                             WorkerSpec, sendTxOuts, submitTx, submitTxRaw, worker)
 import           Pos.Constants              (genesisBlockVersionData, genesisSlotDuration,
                                              isDevelopment)
 import           Pos.Core.Types             (Timestamp (..), mkCoin)
 import           Pos.Crypto                 (Hash, SecretKey, SignTag (SignUSVote),
                                              emptyPassphrase, encToPublic, fakeSigner,
-                                             hash, hashHexF, noPassEncrypt, safeSign,
+                                             hash, hashHexF, noPassEncrypt, safeSign, safeToPublic,
                                              toPublic, unsafeHash, withSafeSigner)
 import           Pos.Data.Attributes        (mkAttributes)
 import           Pos.Delegation             (sendProxySKHeavyOuts, sendProxySKLightOuts)
@@ -64,7 +65,7 @@ import           Pos.Update                 (BlockVersionData (..), UpdateVote (
 import           Pos.Util.UserSecret        (readUserSecret, usKeys)
 import           Pos.Wallet                 (MonadKeys (addSecretKey, getSecretKeys),
                                              WalletMode, WalletParams (..),
-                                             WalletStaticPeersMode, getBalance,
+                                             WalletStaticPeersMode, getBalance, getOwnUtxo,
                                              runWalletStaticPeers, sendProposalOuts,
                                              sendVoteOuts, submitUpdateProposal,
                                              submitVote)
@@ -157,16 +158,13 @@ runCmd sendActions (SendToAllGenesis duration conc delay_ cooldown sendMode tpsS
     let sendTxs :: CmdRunner m ()
         sendTxs = (liftIO . atomically $ tryReadTQueue txQueue) >>= \case
             Just (key, txOut, neighbours) -> do
-                etx <-
-                    lift $
-                    submitTx
-                        sendActions
-                        (fakeSigner key)
-                        neighbours
-                        (NE.fromList [TxOutAux txOut []])
-                case etx of
+                utxo <- getOwnUtxo $ makePubKeyAddress $ safeToPublic (fakeSigner key)
+                let tx = createTx utxo (fakeSigner key) (NE.fromList [TxOutAux txOut []])
+                lift $ case tx of
                     Left err -> addTxFailed tpsMVar >> logError (sformat ("Error: "%stext%" while trying to send to "%shown) err neighbours)
-                    Right tx -> addTxSubmit tpsMVar >> logInfo (sformat ("Submitted transaction: "%txaF%" to "%shown) tx neighbours)
+                    Right tx -> do
+                        submitTxRaw sendActions neighbours tx
+                        addTxSubmit tpsMVar >> logInfo (sformat ("Submitted transaction: "%txaF%" to "%shown) tx neighbours)
                 delay $ ms delay_
                 sendTxs
             Nothing -> return ()
