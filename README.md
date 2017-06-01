@@ -1,88 +1,53 @@
-A Provably Secure Proof-of-Stake Blockchain Protocol
-----------------------------------------------------
+# Cardano SL
 
 [![Build Status](https://travis-ci.org/input-output-hk/cardano-sl.svg)](https://travis-ci.org/input-output-hk/cardano-sl)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/input-output-hk/cardano-sl?branch=master&svg=true)](https://ci.appveyor.com/project/jagajaga/cardano-sl)
 [![Release](https://img.shields.io/github/release/input-output-hk/cardano-sl.svg)](https://github.com/input-output-hk/cardano-sl/releases)
 
-This repository
----------------
+## What is Cardano SL?
 
-This repository contains a Haskell implementation of the _Provably Secure
-Proof-of-Stake_ white paper[1], done in conjunction with members of
-[IOHK](https://iohk.io), the University of Edinburgh, the University of
-Athens, and the University of Connecticut.
+Cardano SL (or Cardano Settlement Layer) is a cryptographic currency designed and developed by [IOHK](https://iohk.io/) in conjunction with the University of Edinburgh, the University of Athens and the University of Connecticut. Cardano SL is based on the Haskell implementation of the white paper ["Ouroboros: A Provably Secure Proof-of-Stake Blockchain Protocol"](https://iohk.io/research/papers/#9BKRHCSI) by Aggelos Kiayias, Alexander Russell, Bernardo David and Roman Oliynykov.
 
-In the paper that lends its name to this project¹, a "Proof-of-Stake" protocol
-with rigorous security guarantees is described in detail, one upon which a
-full-fledged cryptocurrency can be based.
+You can think of Cardano SL as Bitcoin reimagined with a freedom to fix Bitcoin’s design flaws. Please read ["What Makes Cardano SL Special?"](https://cardanodocs.com/introduction/#what-makes-cardano-sl-special) for more info about similarities and differences between Cardano SL and Bitcoin. 
 
-This repository is the first implementation of a cryptocurrency that uses the
-provably secure distributed consensus "proof-of-stake" model proposed in the
-aforementioned paper.
+### Beyond Settlement Layer
 
-The paper was as closely followed as possible by the implementation's authors.
+Cardano SL is called a “Layer” for a reason. It’s the first component of the Cardano Platform. Eventually it will be expanded with a Control Layer, serving as a trusted computation framework to evaluate a special kind of proofs to ensure that a certain computation was carried out correctly. In gaming and gambling, such systems are useful for verifying honesty of random number generation and game outcomes. Accompanied with side chains it will make possible to accomplish such tasks as provably fair distribution of winnings in games. The application of Control Layer lies well beyond gaming and gambling. Identity management, credit system and more will be a part of Cardano Platform. We are also aiming to evolve Daedalus, which is the Cardano SL [wallet application](https://github.com/input-output-hk/daedalus), into a universal cryptocurrency wallet featuring automated cryptocurrency trading and cryptocurrency-to-fiat transactions.
 
-Introduction
-------------
+## Platform support
 
-This repository hosts the prototype implementation of "A Provably Secure
-Proof-of-Stake Blockchain Protocol", the latest version of which can be found
-in the [IOHK website](https://iohk.io/research/papers/a-provably-secure-proof-of-stake-blockchain-protocol/).
+Supported platforms are Windows, macOS and Linux. There are [installers for Windows and macOS](https://daedaluswallet.io/#download), which include a main node and [Daedalus wallet](https://github.com/input-output-hk/daedalus). Linux installer is going to be released soon.
 
-### Where to start?
+## Building from source
 
-It is recommended to start by reading the documentation, which is available [here](https://cardanodocs.com/introduction/).
-Its repository is [here](https://github.com/input-output-hk/cardanodocs.com).
-Developers are encouraged to contribute.
+Cardano SL is written in Haskell, so [Haskell Tool Stack](https://haskellstack.org) is required. Furthermore, we strongly suggest using [Nix package manager](https://nixos.org/nix/download.html) to get the correct dependencies for building Cardano SL. The following commands assume that you already has `stack` and `nix-*` programs:
 
-Platform support
-----------------
+```
+$ git clone git@github.com:input-output-hk/cardano-sl.git
+$ cd cardano-sl
+$ ./util-scripts/build.sh
+```
 
-At the moment, supported platforms are Windows, macOS and Linux. There are [installers
-for Windows and macOS](https://daedaluswallet.io/#download), which include a node and
-a [wallet](https://github.com/input-output-hk/daedalus).
+Please refer to [this page of the documentation](https://cardanodocs.com/for-contributors/building-from-source/) for technical details.
 
-Build from source
------------------
+### Binaries
 
-To build from source, please refer to [this](https://cardanodocs.com/for-contributors/building-from-source/#cardano-sl-and-daedalus-bridge)
- page of the documentation.
+There are set of Cardano SL components as a result of building. This set includes the main node for Cardano SL network and different helper tools. Please read [this page of the documentation](https://cardanodocs.com/technical/cli-options/) for technical details.
 
-Note that the [`stack` system](https://docs.haskellstack.org/en/stable/README/) is
-required before `cardano-sl` can be built.
+## Contributing
 
-For developer convenience, also note that in the `scripts` and `util-scripts` folders
-there are a variety of utility scripts to build various components of the system,
-such as the general `util-scripts/build.sh`, or the `util-scripts/clean.sh` to remove
-byproducts of compilation.
+Thank you for considering to help out with the source code! We welcome contributions from anyone, and are grateful for even the smallest of fixes!
 
-Running the nodes
------------------
+If you'd like to contribute to Cardano SL, please fork this repository, fix, commit and send a pull request for the maintainers to review and merge into the main code base.
 
-If you wish to launch and run nodes locally please refer to [this](https://cardanodocs.com/for-contributors/building-from-source/#cardano-node)
-page of the documentation.
+Please make sure your contributions adhere to our coding guidelines:
 
-Generating the wallet documentation
------------------------------------
+* Code must adhere to the [Serokell Haskell Style Guide](https://github.com/serokell/serokell-util/blob/master/serokell-style.md).
+* Code must be documented with [Haddock](https://www.haskell.org/haddock/doc/html/index.html).
+* Pull requests need to be based on and opened against the `master` branch.
 
-Build the project and run `stack exec --nix -- cardano-wallet-web-docs`. Look at the generated:
-- `./docs/wallet-web-api.md`
-- `./docs/wallet-table-web-api.md`
+Please note that this project uses custom prelude [Universum](https://github.com/serokell/universum) instead of default one.
 
-Benchmarking
-------------
+## License
 
-_Pending_
-
-Contributing
-------------
-
-> **This project uses [`universum`](https://github.com/serokell/universum)
-> as default prelude**
-
-_Pending_
-
-#### References
-
-[1]: A. Kiayias, I. Konstantinou, A. Russell, B. David, R. Oliynykov, "[A Provably Secure Proof-of-Stake Blockchain Protocol](https://eprint.iacr.org/2016/889.pdf)"
+Cardano SL is released under the terms of the [MIT license](https://opensource.org/licenses/MIT). Please see [LICENSE](https://github.com/input-output-hk/cardano-sl/blob/master/LICENSE) for more information.
