@@ -84,70 +84,6 @@ import           Pos.DHT.Real                 (KademliaDHTInstance,
 import           Pos.Discovery.Holders        (runDiscoveryConstT, runDiscoveryKademliaT)
 import           Pos.Discovery.Holders        (DiscoveryKademliaT, DiscoveryConstT)
 import           Pos.Genesis                  (genesisLeaders, genesisSeed)
-{-
-=======
-import           Control.Concurrent.STM      (newEmptyTMVarIO, newTBQueueIO)
-import           Control.Lens                (each, to, _tail)
-import           Control.Monad.Fix           (MonadFix)
-import           Data.Default                (def)
-import           Data.Tagged                 (untag)
-import           Data.Text                   (pack)
-import qualified Data.Time                   as Time
-import           Formatting                  (build, sformat, shown, (%))
-import           Mockable                    (CurrentTime, Mockable, MonadMockable, 
-                                              Bracket, Production (..), Throw, 
-                                              bracket, finally, throw)
-import           Network.QDisc.Fair          (fairQDisc)
-import           Network.Transport.Abstract  (Transport, closeTransport, hoistTransport)
-import           Network.Transport.Concrete  (concrete)
-import qualified Network.Transport.TCP       as TCP
-import           Node                        (Node, NodeAction (..),
-                                              defaultNodeEnvironment, hoistSendActions,
-                                              node, simpleNodeEndPoint,
-                                              NodeEndPoint, Statistics,
-                                              ReceiveDelay, noReceiveDelay)
-import           Node.Util.Monitor           (setupMonitor, stopMonitor)
-import qualified STMContainers.Map           as SM
-import           System.IO                   (hClose, hSetBuffering,
-                                              BufferMode (NoBuffering))
-import           System.Random               (newStdGen)
-import qualified System.Remote.Monitoring    as Monitoring
-import qualified System.Metrics              as Metrics
-import qualified System.Metrics.Counter      as Metrics.Counter
-import qualified System.Metrics.Gauge        as Metrics.Gauge
-import           System.Wlog                 (LoggerConfig (..), WithLogger, logError,
-                                              logInfo, logDebug, productionB,
-                                              releaseAllHandlers, setupLogging,
-                                              usingLoggerName)
-import           Universum                   hiding (bracket, finally)
-
-import           Pos.Binary                  ()
-import           Pos.CLI                     (readLoggerConfig)
-import           Pos.Communication           (ActionSpec (..), BiP (..), InSpecs (..),
-                                              ListenersWithOut, NodeId, OutSpecs (..),
-                                              PeerId (..), VerInfo (..), allListeners,
-                                              hoistListenerSpec, unpackLSpecs)
-import           Pos.Communication.PeerState (runPeerStateHolder)
-import qualified Pos.Constants               as Const
-import           Pos.Context                 (ContextHolder, NodeContext (..),
-                                              runContextHolder)
-import           Pos.Core                    (Timestamp ())
-import           Pos.Crypto                  (createProxySecretKey, encToPublic)
-import           Pos.DB                      (DBHolder, MonadDB, NodeDBs, runDBHolder)
-import           Pos.DB.DB                   (initNodeDBs, openNodeDBs)
-import           Pos.DB.GState               (getTip)
-import           Pos.DB.Misc                 (addProxySecretKey)
-import           Pos.Delegation.Holder       (runDelegationT)
-import           Pos.DHT.Real                (KademliaDHTInstance,
-                                              KademliaDHTInstanceConfig (..),
-                                              KademliaParams (..), startDHTInstance,
-                                              stopDHTInstance)
-import           Pos.Discovery.Holders       (DiscoveryKademliaT, DiscoveryConstT,
-                                              runDiscoveryConstT,
-                                              runDiscoveryKademliaT)
-import           Pos.Genesis                 (genesisLeaders, genesisSeed)
->>>>>>> added relay queue monitoring (json logs and ekg)
--}
 import           Pos.Launcher.Param          (BaseParams (..), LoggingParams (..),
                                               NodeParams (..), Backpressure (..))
 import           Pos.Lrc.Context              (LrcContext (..), LrcSyncData (..))
@@ -315,23 +251,18 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
         let lowerThreshold = fst (bpressLevelOne npBackpressure)
             upperThreshold = fst (bpressLevelTwo npBackpressure)
             lowerDelay = snd (bpressLevelOne npBackpressure)
-            upperDelay = snd (bpressLevelOne npBackpressure)
+            upperDelay = snd (bpressLevelTwo npBackpressure)
 
-            mkReceiveDelay _ = do
-                {-
-                -- Maybe we'll use something tlike this for the estimator?
-                qlength <- liftIO $ Metrics.Gauge.read ekgMemPoolQueueLength
+            mkReceiveDelay _ = noReceiveDelay
+            mkConnectDelay _ = do
                 waitTime <- liftIO $ Metrics.Gauge.read ekgMemPoolWaitTime
-                let estimate = qlength * waitTime
-                -}
                 let estimate :: Word32
-                    estimate = 0
+                    estimate = fromIntegral (waitTime :: Int64)
                 if estimate < lowerThreshold
                 then return Nothing
                 else if estimate < upperThreshold
                 then return $ Just lowerDelay
                 else return $ Just upperDelay
-
 
         sscState <-
            runCH @ssc allWorkersNum np initNC modernDBs (return ()) (const (return ())) .
@@ -363,7 +294,7 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
            runDbCoreRedirect .
            runUpdatesRedirect .
            runBlockchainInfoRedirect .
-           runServer mkTransport mkReceiveDelay listeners outSpecs startMonitoring stopMonitoring . ActionSpec $
+           runServer mkTransport mkReceiveDelay mkConnectDelay listeners outSpecs startMonitoring stopMonitoring . ActionSpec $
                \vI sa -> nodeStartMsg npBaseParams >> action vI sa
   where
     LoggingParams {..} = bpLoggingParams npBaseParams
@@ -394,13 +325,14 @@ runServer
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
     => (m (Statistics m) -> NodeEndPoint m)
     -> (m (Statistics m) -> ReceiveDelay m)
+    -> (m (Statistics m) -> ReceiveDelay m)
     -> m (ListenersWithOut m)
     -> OutSpecs
     -> (Node m -> m t)
     -> (t -> m ())
     -> ActionSpec m b
     -> m b
-runServer mkTransport mkReceiveDelay packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
+runServer mkTransport mkReceiveDelay mkConnectDelay packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
     packedLS  <- packedLS_M
     let (listeners', InSpecs ins, OutSpecs outs) = unpackLSpecs packedLS
         ourVerInfo =
@@ -408,7 +340,7 @@ runServer mkTransport mkReceiveDelay packedLS_M (OutSpecs wouts) withNode afterN
         listeners = listeners' ourVerInfo
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo "%build) ourVerInfo
-    node mkTransport mkReceiveDelay stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
+    node mkTransport mkReceiveDelay mkConnectDelay stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
         -- CSL-831 TODO use __peerVerInfo
         NodeAction (\__peerVerInfo -> listeners) $ \sendActions -> do
             t <- withNode __node
@@ -418,7 +350,7 @@ runServer_
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
     => Transport m -> ListenersWithOut m -> OutSpecs -> ActionSpec m b -> m b
 runServer_ transport packedLS outSpecs =
-    runServer (simpleNodeEndPoint transport) (const noReceiveDelay) (pure packedLS) outSpecs acquire release
+    runServer (simpleNodeEndPoint transport) (const noReceiveDelay) (const noReceiveDelay) (pure packedLS) outSpecs acquire release
   where
     acquire = const pass
     release = const pass
