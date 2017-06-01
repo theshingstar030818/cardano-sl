@@ -233,17 +233,13 @@ runRawRealMode peerId transport np@NodeParams {..} sscnp listeners outSpecs (Act
             let lowerThreshold = fst (bpressLevelOne npBackpressure)
                 upperThreshold = fst (bpressLevelTwo npBackpressure)
                 lowerDelay = snd (bpressLevelOne npBackpressure)
-                upperDelay = snd (bpressLevelOne npBackpressure)
+                upperDelay = snd (bpressLevelTwo npBackpressure)
 
-                mkReceiveDelay _ = do
-                    {-
-                    -- Maybe we'll use something tlike this for the estimator?
-                    qlength <- liftIO $ Metrics.Gauge.read ekgMemPoolQueueLength
+                mkReceiveDelay _ = noReceiveDelay
+                mkConnectDelay _ = do
                     waitTime <- liftIO $ Metrics.Gauge.read ekgMemPoolWaitTime
-                    let estimate = qlength * waitTime
-                    -}
                     let estimate :: Word32
-                        estimate = 0
+                        estimate = fromIntegral (waitTime :: Int64)
                     if estimate < lowerThreshold
                     then return Nothing
                     else if estimate < upperThreshold
@@ -257,7 +253,9 @@ runRawRealMode peerId transport np@NodeParams {..} sscnp listeners outSpecs (Act
                 runTxpHolder txpVar txpMetrics .
                 runDelegationT def .
                 runPeerStateHolder stateM .
-                runServer peerId mkTransport mkReceiveDelay listeners outSpecs startMonitoring stopMonitoring . ActionSpec $
+                runServer peerId mkTransport mkReceiveDelay mkConnectDelay
+                          listeners outSpecs startMonitoring stopMonitoring
+                        . ActionSpec $
                     \vI sa -> nodeStartMsg npBaseParams >> action vI sa
   where
     LoggingParams {..} = bpLoggingParams npBaseParams
@@ -289,13 +287,14 @@ runServer
     => PeerId
     -> (m (Statistics m) -> NodeEndPoint m)
     -> (m (Statistics m) -> ReceiveDelay m)
+    -> (m (Statistics m) -> ReceiveDelay m)
     -> m (ListenersWithOut m)
     -> OutSpecs
     -> (Node m -> m t)
     -> (t -> m ())
     -> ActionSpec m b
     -> m b
-runServer peerId mkTransport mkReceiveDelay packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
+runServer peerId mkTransport mkReceiveDelay mkConnectDelay packedLS_M (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
     packedLS  <- packedLS_M
     let (listeners', InSpecs ins, OutSpecs outs) = unpackLSpecs packedLS
         ourVerInfo =
@@ -303,7 +302,7 @@ runServer peerId mkTransport mkReceiveDelay packedLS_M (OutSpecs wouts) withNode
         listeners = listeners' ourVerInfo
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo "%build) ourVerInfo
-    node mkTransport mkReceiveDelay stdGen BiP (peerId, ourVerInfo) defaultNodeEnvironment $ \__node ->
+    node mkTransport mkReceiveDelay mkConnectDelay stdGen BiP (peerId, ourVerInfo) defaultNodeEnvironment $ \__node ->
         NodeAction listeners $ \sendActions -> do
             t <- withNode __node
             action ourVerInfo sendActions `finally` afterNode t
@@ -312,7 +311,9 @@ runServer_
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
     => PeerId -> Transport m -> ListenersWithOut m -> OutSpecs -> ActionSpec m b -> m b
 runServer_ peerId transport packedLS outSpecs =
-    runServer peerId (simpleNodeEndPoint transport) (const noReceiveDelay) (pure packedLS) outSpecs acquire release
+    runServer peerId (simpleNodeEndPoint transport)
+              (const noReceiveDelay) (const noReceiveDelay)
+              (pure packedLS) outSpecs acquire release
   where
     acquire = const pass
     release = const pass
