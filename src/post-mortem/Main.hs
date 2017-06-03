@@ -64,7 +64,7 @@ processLogDirOverview logDir sampleProb = do
     err $ "mem pool entries: " ++ show (length mp)
 
     let dirName   = extractName logDir
-    let graphFile = getName "graph" dirName "svg"
+    let graphFile = getName "graph" dirName "png"
     b <- writeGraph graphFile g
     when b $ err $ "wrote graph png to " ++ show graphFile
 
