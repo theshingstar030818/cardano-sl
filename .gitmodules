@@ -1,0 +1,3 @@
+[submodule "typed-wire"]
+	path = typed-wire
+	url = https://github.com/ajnsit/typed-wire
