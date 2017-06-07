@@ -224,7 +224,14 @@ instance Bi a => Bi (Signed a) where
 
 deriving instance Bi (ProxyCert w)
 
-instance (Bi w) => Bi (ProxySecretKey w) where
+instance Bi w => Bi (ProxySecretKey w) where
+    size = let size' :: (a -> b) -> Size a
+               size' = size @a
+           in case (size' pskOmega, size' pskIssuerPk, size pskDelegate
+    , pskIssuerPk   :: PublicKey
+    , pskDelegatePk :: PublicKey
+    , pskCert       :: ProxyCert w
+
     put (ProxySecretKey w iPk dPk cert) = put w >> put iPk >> put dPk >> put cert
     get = label "ProxySecretKey" $ liftM4 ProxySecretKey get get get get
 

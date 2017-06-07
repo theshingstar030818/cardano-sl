@@ -3,8 +3,11 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ParallelListComp    #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeOperators       #-}
 
 #include "MachDeps.h"
@@ -95,6 +98,7 @@ import           Unsafe.Coerce               (unsafeCoerce)
 -}
 
 import           Control.Lens                (_Left)
+import           Control.Lens.Internal.TH    (appsT, newNames, toTupleT)
 import           Data.Bits                   (Bits (..), FiniteBits, countLeadingZeros,
                                               finiteBitSize)
 import qualified Data.ByteString             as BS
@@ -122,6 +126,7 @@ import           Data.Word                   (Word32)
 import           Foreign.Ptr                 (minusPtr, plusPtr)
 import           Formatting                  (formatToString, int, (%))
 import           GHC.TypeLits                (ErrorMessage (..), TypeError)
+import           Language.Haskell.TH
 import           Serokell.Data.Memory.Units  (Byte, fromBytes, toBytes)
 import           Serokell.Data.Memory.Units  (Byte)
 import           System.IO.Unsafe            (unsafePerformIO)
@@ -589,7 +594,7 @@ instance Bi a => Bi (Tagged s a) where
 
 instance (Bi a, Bi b) => Bi (a, b) where
     {-# INLINE size #-}
-    size = combineSize fst snd
+    size = combineSize (fst, snd)
     {-# INLINE put #-}
     put (a, b) = put a *> put b
     {-# INLINE get #-}
@@ -597,20 +602,21 @@ instance (Bi a, Bi b) => Bi (a, b) where
 
 instance (Bi a, Bi b, Bi c) => Bi (a, b, c) where
     {-# INLINE size #-}
-    size = combineSize (view _1) (\(_, b, c) -> (b, c))
+    size = combineSize (view _1, view _2, view _3)
     {-# INLINE put #-}
     put (a, b, c) = put a *> put b *> put c
     {-# INLINE get #-}
     get = liftM3 (,,) get get get
 
+{-
 instance (Bi a, Bi b, Bi c, Bi d) => Bi (a, b, c, d) where
     {-# INLINE size #-}
-    size = combineSize (\(_, _, c, d) -> (c, d))
-                    (\(a, b, _, _) -> (a, b))
+    size = combineSize (view _1, view _2, view _3, view _4)
     {-# INLINE put #-}
     put (a, b, c, d) = put a *> put b *> put c *> put d
     {-# INLINE get #-}
     get = liftM4 (,,,) get get get get
+-}
 
 instance Bi ByteString where
     size = Store.size
@@ -695,8 +701,9 @@ getMany n = go [] n
 {-# INLINE getMany #-}
 -}
 
-combineSize :: (Bi b, Bi c) => (a -> b) -> (a -> c) -> Size a
-combineSize f g = Store.combineSizeWith f g size size
+class CombineSize a b | a -> b where
+    combineSize :: a -> Size b
+-- instances are defined at the end of the file because they use TH
 
 convertSize :: (a -> b) -> Size b -> Size a
 convertSize _  (ConstSize s) = ConstSize s
@@ -953,3 +960,68 @@ getByteString i = reifyNat (fromIntegral i) $ \(_ :: Proxy n) -> unStaticSize <$
 putByteString :: ByteString -> Poke ()
 putByteString bs = reifyNat (fromIntegral $ BS.length bs) $ \(_ :: Proxy n) ->
                       Store.poke (Store.toStaticSizeEx bs :: StaticSize n ByteString)
+
+----------------------------------------------------------------------------
+-- CombineSize instances
+----------------------------------------------------------------------------
+
+-- this could be written as “CombineSize (x -> a, x -> b) x”, but the way we
+-- do it here leads to better type inference because this instance guarantees
+-- that it's the *only* possible instance for a tuple of length 2
+instance (Bi a, xa ~ (x -> a),
+          Bi b, xb ~ (x -> b))
+         => CombineSize (xa, xb) x where
+    combineSize (a, b) = Store.combineSizeWith a b size size
+    {-# INLINE combineSize #-}
+
+{- Generate CombineSize instances for larger sizes.
+
+Generated instances look like this:
+
+    instance (Bi p1, x1 ~ (xt -> p1),
+              Bi p2, x2 ~ (xt -> p2))
+            => CombineSize (x1, x2) xt where
+       combineSize (f1, f2) =
+           case (size :: Size p1, size :: Size p2) of
+               (ConstSize s1, ConstSize s2) -> ConstSize (s1 + s2)
+               _ -> VarSize (\xv -> getSize (f1 xv) + getSize (f2 xv))
+       {-# INLINE combineSize #-}
+-}
+forM [3..10] $ \n -> do
+    -- An utility to sum a bunch of expressions
+    let sumE = foldr1 (infixApp [|(+)|])
+    -- names
+    xt <- newName "xt"
+    xv <- newName "xv"
+    ps <- newNames "p" n
+    xs <- newNames "x" n
+    fs <- newNames "f" n
+    ss <- newNames "s" n
+    -- constraints
+    let biConstraints = [ [t|Bi $p|] | p <- map varT ps ]
+        eqConstraints = [ [t|$x ~ ($(varT xt) -> $p)|] | p <- map varT ps
+                                                       | x <- map varT xs ]
+    -- instance head
+    let instHead = [t|CombineSize $(toTupleT (map varT xs)) $(varT xt)|]
+    -- combineSize argument
+    let funArg = tupP (map varP fs)
+    -- case scrutinee
+    let caseExp = tupE [ [|size :: Size $p|] | p <- map varT ps ]
+    -- the first case pattern and the result
+    let casePat1 = tupP [ [p|ConstSize $s|] | s <- map varP ss ]
+    let caseRes1 = appE [|ConstSize|] (sumE (map varE ss))
+    -- the second case pattern and the result
+    let casePat2 = wildP
+    let caseRes2 = appE [|VarSize|] (lam1E (varP xv)
+                       (sumE [ [|getSize ($f $(varE xv))|] | f <- map varE fs ]))
+    -- the inline pragma
+    let inlinePragma = pragInlD 'combineSize Inline FunLike AllPhases
+    -- all together
+    instanceD
+        (sequence (biConstraints ++ eqConstraints))
+        instHead
+        [ funD 'combineSize [
+              clause [funArg] (normalB $ caseE caseExp
+                  [ match casePat1 (normalB caseRes1) []
+                  , match casePat2 (normalB caseRes2) [] ]) [] ]
+        , inlinePragma ]
