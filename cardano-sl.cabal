@@ -749,11 +749,11 @@ executable cardano-wallet
 executable cardano-wallet-hs2purs
   hs-source-dirs:      src/wallet-purescript
   main-is:             Main.hs
-  other-modules:       PSTypes
+  -- other-modules:       PSTypes
   build-depends:       base
+                     , typed-wire
                      , cardano-sl-core
                      , cardano-sl
-                     , purescript-bridge
                      , universum >= 0.1.11
   default-language:    Haskell2010
   ghc-options:         -threaded -rtsopts

@@ -1,0 +1,5 @@
+module Pos.Util.BackupPhrase;
+
+type BackupPhrase {
+  bpToList: List<String>;
+}

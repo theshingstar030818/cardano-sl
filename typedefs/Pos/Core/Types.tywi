@@ -1,0 +1,24 @@
+module Pos.Core.Types;
+
+type Coin {
+  getCoin: Int;
+}
+
+type ChainDifficulty {
+  getChainDifficulty: Int;
+}
+
+type BlockVersion {
+  bvMajor: Int;
+  bvMinor: Int;
+  bvAlt: Int;
+}
+
+type SoftwareVersion {
+  svAppName: ApplicationName;
+  svNumber: Int;
+}
+
+type ApplicationName {
+  getApplicationName: String;
+}

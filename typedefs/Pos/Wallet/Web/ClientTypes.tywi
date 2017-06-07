@@ -1,0 +1,164 @@
+module Pos.Wallet.Web.ClientTypes;
+
+import Pos.Core.Types;
+import Pos.Util.BackupPhrase;
+
+type NominalDiffTime {
+  // TODO: OK?
+  getNominalDiffTime: Int;
+}
+
+type CAccountMeta {
+  caName: String;
+}
+
+type CAccountInit {
+  caInitMeta: CAccountMeta;
+  cwInitWId: CId<WS>;
+}
+
+type CAccount {
+  caId: CAccountId;
+  caMeta: CAccountMeta;
+  caAccount: List<CAddress>;
+  caAmount: CCoin;
+}
+
+type CWallet {
+  cwId: CId<WS>;
+  wWSetMeta: CWalletMeta;
+  cwAccountsNumber: Int;
+  cwAmount: CCoin;
+  cwHasPassphrase: Bool;
+  cwPassphraseLU: NominalDiffTime;
+}
+
+type CWalletInit {
+  cwInitMeta: CWalletMeta;
+  cwBackupPhrase: Pos.Util.BackupPhrase.BackupPhrase;
+}
+
+type CProfile {
+  cpLocale: String;
+}
+
+type CTxMeta {
+  ctmTitle: String;
+  ctmDescription: String;
+  ctmDate: NominalDiffTime;
+}
+
+type CTExMeta {
+  cexTitle: String;
+  cexDescription: String;
+  cexDate: NominalDiffTime;
+  cexRate: String;
+  cexLabel: String;
+  cexId: CId<Addr>;
+}
+
+enum CAccountId {
+  CAccountId(String);
+}
+
+type CWalletMeta {
+  cwName: String;
+  cwAssurance: CWalletAssurance;
+  csUnit: Int;
+}
+
+type CAddress {
+  cadId: CId<Addr>;
+  cadAmount: CCoin;
+}
+
+type CWAddressMeta {
+  cwamWSId: CId<WS>;
+  caaWalletIndex: Int;
+  cwamAccountIndex: Int;
+  cwamId: CId<Addr>;
+}
+
+enum WS {
+  WS;
+}
+
+enum Addr {
+  Addr;
+}
+
+enum CId<a> {
+  CId(CHash);
+}
+
+enum CHash {
+  CHash(String);
+}
+
+enum CTxId {
+  CTxId(CHash);
+}
+
+type CTx {
+  ctId: CTxId;
+  ctAmount: CCoin;
+  ctConfirmations: Int;
+  ctMeta: CTxMeta;
+  ctInputAddrs: List<CId<Addr>>;
+  ctOutputAddrs: List<CId<Addr>>;
+}
+
+enum NotifyEvent {
+  ConnectionOpened;
+  NetworkDifficultyChanged(Pos.Core.Types.ChainDifficulty);
+  LocalDifficultyChanged(Pos.Core.Types.ChainDifficulty);
+  ConnectedPeersChanged(Int);
+  UpdateAvailable;
+  ConnectionClosed;
+}
+
+type SyncProgress {
+  spLocalCD: Pos.Core.Types.ChainDifficulty;
+  spNetworkCD: Maybe<Pos.Core.Types.ChainDifficulty>;
+  spPeers: Int;
+}
+
+type CUpdateInfo {
+  cuiSoftwareVersion: Pos.Core.Types.SoftwareVersion;
+  cuiBlockVersion: Pos.Core.Types.BlockVersion;
+  cuiScriptVersion: Int;
+  cuiImplicit: Bool;
+  cuiVotesFor: Int;
+  cuiVotesAgainst: Int;
+  cuiPositiveStake: CCoin;
+  cuiNegativeStake: CCoin;
+}
+
+type CWalletRedeem {
+  crWalletId: CAccountId;
+  crSeed: String;
+}
+
+type CPaperVendWalletRedeem {
+  pvWalletId: CAccountId;
+  pvSeed: String;
+  pvBackupPhrase: Pos.Util.BackupPhrase.BackupPhrase;
+}
+
+type CInitialized {
+  cTotalTime: Int;
+  cPreInit: Int;
+}
+
+enum CPassPhrase {
+  CPassPhrase(String);
+}
+
+enum CWalletAssurance {
+  CWAStrict;
+  CWANormal;
+}
+
+type CCoin {
+  getCCoin: String;
+}

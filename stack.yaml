@@ -6,6 +6,7 @@ extra-package-dbs: []
 
 packages:
 - '.'
+- typed-wire
 - core
 - update
 - infra
