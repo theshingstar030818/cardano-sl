@@ -26,7 +26,7 @@ import           Control.Lens               (_Wrapped)
 import qualified Data.List.NonEmpty         as NE
 import qualified Data.Text.Buildable        as B
 import           Formatting                 (bprint, build, sformat, shown, stext, (%))
-import           Mockable                   (fork)
+import           Node.Message               (Message)
 import           Paths_cardano_sl           (version)
 import           Serokell.Util.Text         (listJson)
 import           Serokell.Util.Verify       (VerificationRes (..), formatFirstError)
@@ -41,7 +41,6 @@ import           Pos.Block.Logic            (ClassifyHeaderRes (..),
                                              lcaWithMainChain, needRecovery,
                                              verifyAndApplyBlocks, withBlkSemaphore)
 import qualified Pos.Block.Logic            as L
-import           Pos.Block.Network.Announce (announceBlock)
 import           Pos.Block.Network.Types    (MsgGetBlocks (..), MsgGetHeaders (..),
                                              MsgHeaders (..))
 import           Pos.Block.Pure             (verifyHeaders)
@@ -61,7 +60,7 @@ import           Pos.Reporting.Methods      (reportMisbehaviourMasked)
 import           Pos.Ssc.Class              (Ssc, SscWorkersClass)
 import           Pos.Types                  (Block, BlockHeader, HasHeaderHash (..),
                                              HeaderHash, blockHeader, difficultyL,
-                                             gbHeader, headerHashG, prevBlockL)
+                                             headerHashG, prevBlockL)
 import           Pos.Util                   (inAssertMode, _neHead, _neLast)
 import           Pos.Util.Chrono            (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.WorkMode               (WorkMode)
@@ -101,7 +100,7 @@ instance Exception BlockNetLogicException where
 -- progress and 'ncRecoveryHeader' is full, we'll be requesting blocks anyway
 -- and until we're finished we shouldn't be asking for new blocks.
 triggerRecovery :: forall ssc m.
-    (SscWorkersClass ssc, WorkMode ssc m)
+    (SscWorkersClass ssc, WorkMode ssc m, Message (MsgHeaders ssc), Message MsgGetHeaders)
     => SendActions m -> m ()
 triggerRecovery sendActions = unlessM recoveryInProgress $ do
     logDebug "Recovery started, requesting tips from neighbors"
@@ -112,7 +111,8 @@ triggerRecovery sendActions = unlessM recoveryInProgress $ do
                throwM e
         logDebug "Finished requesting tips for recovery"
 
-requestTipOuts :: OutSpecs
+requestTipOuts :: forall ssc. (Message (MsgHeaders ssc), Message MsgGetHeaders)
+    => OutSpecs
 requestTipOuts =
     toOutSpecs [ convH (Proxy :: Proxy MsgGetHeaders)
                        (Proxy :: Proxy (MsgHeaders ssc)) ]
@@ -422,7 +422,7 @@ applyWithoutRollback
     => SendActions m
     -> OldestFirst NE (Block ssc)
     -> m ()
-applyWithoutRollback sendActions blocks = do
+applyWithoutRollback _sendActions blocks = do
     logInfo $ sformat ("Trying to apply blocks w/o rollback: "%listJson) $
         fmap (view blockHeader) blocks
     withBlkSemaphore applyWithoutRollbackDo >>= \case
@@ -442,7 +442,6 @@ applyWithoutRollback sendActions blocks = do
                     & map (view blockHeader)
                 applied = NE.fromList $
                     getOldestFirst prefix <> one (toRelay ^. blockHeader)
-            relayBlock sendActions toRelay
             logInfo $ blocksAppliedMsg applied
   where
     newestTip = blocks ^. _Wrapped . _neLast . headerHashG
@@ -462,7 +461,7 @@ applyWithRollback
     -> HeaderHash
     -> NewestFirst NE (Blund ssc)
     -> m ()
-applyWithRollback peerId sendActions toApply lca toRollback = do
+applyWithRollback peerId _sendActions toApply lca toRollback = do
     logInfo $ sformat ("Trying to apply blocks w/ rollback: "%listJson)
         (map (view blockHeader) toApply)
     logInfo $ sformat ("Blocks to rollback "%listJson) toRollbackHashes
@@ -478,7 +477,6 @@ applyWithRollback peerId sendActions toApply lca toRollback = do
             reportRollback
             logInfo $ blocksRolledBackMsg (getNewestFirst toRollback)
             logInfo $ blocksAppliedMsg (getOldestFirst toApply)
-            relayBlock sendActions $ toApply ^. _Wrapped . _neLast
   where
     toRollbackHashes = fmap headerHash toRollback
     toApplyHashes = fmap headerHash toApply
@@ -497,18 +495,6 @@ applyWithRollback peerId sendActions toApply lca toRollback = do
         fromMaybe panicBrokenLca $ nonEmpty $
         NE.dropWhile ((lca /=) . (^. prevBlockL)) $
         getOldestFirst $ toApply
-
-relayBlock
-    :: forall ssc m.
-       (WorkMode ssc m)
-    => SendActions m -> Block ssc -> m ()
-relayBlock _ (Left _)                  = logDebug "Not relaying Genesis block"
-relayBlock sendActions (Right mainBlk) = do
-    recoveryInProgress >>= \case
-        True -> logDebug "Not relaying block in recovery mode"
-        False -> do
-            logDebug $ sformat ("Calling announceBlock for "%build%".") (mainBlk ^. gbHeader)
-            void $ fork $ announceBlock sendActions $ mainBlk ^. gbHeader
 
 ----------------------------------------------------------------------------
 -- Common logging / logic sink points
