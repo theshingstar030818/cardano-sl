@@ -11,18 +11,18 @@ readonly README=README.md
 readonly PATH_TO_DOCS_CHAPTERS="${PATH_TO_CARDANO_DOCS_REPO}"/_docs/
 
 # Clone repository with an ability to push into it.
-cloneRepository () {
-    # Env variable ${GITHUB_CARDANO_DOCS_ACCESS_2} already stored in Travis CI settings.
-    # This token gives us an ability to push into repository.
-    readonly REPO_NAME=$1
-    readonly PATH_TO_REPO=$2
-    echo "**** Cloning ${REPO_NAME} repository ****"
-    rm -rf "${PATH_TO_REPO}"
-    git clone --quiet --branch=master https://"${GITHUB_CARDANO_DOCS_ACCESS_2}"@github.com/input-output-hk/"${REPO_NAME}" "${PATH_TO_REPO}"
-}
+#cloneRepository () {
+#    # Env variable ${GITHUB_CARDANO_DOCS_ACCESS_2} already stored in Travis CI settings.
+#    # This token gives us an ability to push into repository.
+#    readonly REPO_NAME=$1
+#    readonly PATH_TO_REPO=$2
+#    echo "**** Cloning ${REPO_NAME} repository ****"
+#    rm -rf "${PATH_TO_REPO}"
+#    git clone --quiet --branch=master https://"${GITHUB_CARDANO_DOCS_ACCESS_2}"@github.com/input-output-hk/"${REPO_NAME}" "${PATH_TO_REPO}"
+#}
 
-cloneRepository "${CARDANO_DOCS_REPO_NAME}" "${PATH_TO_CARDANO_DOCS_REPO}"
-cloneRepository "${CARDANO_SL_REPO_NAME}"   "${PATH_TO_CARDANO_SL_REPO}"
+#cloneRepository "${CARDANO_DOCS_REPO_NAME}" "${PATH_TO_CARDANO_DOCS_REPO}"
+#cloneRepository "${CARDANO_SL_REPO_NAME}"   "${PATH_TO_CARDANO_SL_REPO}"
 
 echo "**** Building ${README} from documentation ****"
 
@@ -37,25 +37,24 @@ echo "**** Building ${README} from documentation ****"
 readonly PART_COMMON=CARDANO_SL_README_
 readonly PART_BEGIN="${PART_COMMON}"BEGIN_
 readonly PART_END="${PART_COMMON}"END_
-# Current version of the ${README} is building from 7 parts.
-for i in {1..7}; do
+# Current version of the ${README} is building from 5 parts.
+for i in {1..5}; do
     # Find current part of the ${README} using hidden comments, extract it and append to ${README}.
     find "${PATH_TO_DOCS_CHAPTERS}" -iname '*.md' -exec sed -n "/$PART_BEGIN$i/,/$PART_END$i/p" "{}" >> "${README}" \;
-    echo "" >> "${README}"
 done
 # Remove hidden comments from the ${README}.
 sed -i "/$PART_COMMON/d" "${README}"
 
-echo "**** Copy new ${README} in ${CARDANO_SL_REPO_NAME} ****"
-mv -f "${README}" "${PATH_TO_CARDANO_SL_REPO}"
+#echo "**** Copy new ${README} in ${CARDANO_SL_REPO_NAME} ****"
+#mv -f "${README}" "${PATH_TO_CARDANO_SL_REPO}"
 
-echo "**** Push all changes, if required ****"
-cd "${PATH_TO_CARDANO_SL_REPO}"
-git add .
-if [ -n "$(git status --porcelain)" ]; then 
-    echo "     There are changes in ${README}, push it...";
-    git commit -a -m "Automatic ${README} rebuilding."
-    git push -f origin master
-else
-    echo "     No changes in ${README}, skip.";
-fi
+#echo "**** Push all changes, if required ****"
+#cd "${PATH_TO_CARDANO_SL_REPO}"
+#git add .
+#if [ -n "$(git status --porcelain)" ]; then 
+#    echo "     There are changes in ${README}, push it...";
+#    git commit -a -m "Automatic ${README} rebuilding."
+#    git push -f origin master
+#else
+#    echo "     No changes in ${README}, skip.";
+#fi
