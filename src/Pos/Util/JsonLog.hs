@@ -28,7 +28,6 @@ import           Pos.Block.Core.Genesis.Lens   (genBlockEpoch)
 import           Pos.Block.Core.Main.Lens      (mainBlockTxPayload, mainBlockSlot)
 import           Pos.Block.Core.Union.Types    (BiSsc, Block)
 import           Pos.Communication.Relay.Logic (InvReqDataFlowLog)
-import           Pos.Communication.Types.Relay (RelayLogEvent)
 import           Pos.Crypto                    (hash, hashHexF)
 import           Pos.Ssc.Class.Helpers         (SscHelpersClass)
 import           Pos.Txp.Core.Types            (txpTxs)
@@ -100,7 +99,6 @@ data JLEvent = JLCreatedBlock JLBlock
              | JLTxSent JLTxS
              | JLTxReceived JLTxR 
              | JLMemPoolEvent JLMemPool
-             | JLRelayEvent RelayLogEvent
   deriving (Show, Generic)
 
 $(deriveJSON defaultOptions ''JLBlock)
