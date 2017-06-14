@@ -62,7 +62,6 @@ library
                      , cardano-sl-core
                      , cardano-sl-db
                      , cardano-sl-infra
-                     , conduit
                      , containers
                      , data-default
                      , derive

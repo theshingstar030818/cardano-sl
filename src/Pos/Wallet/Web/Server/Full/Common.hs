@@ -13,7 +13,6 @@ import           Universum
 
 import qualified Control.Monad.Catch           as Catch
 import           Control.Monad.Except          (MonadError (throwError))
-import           Control.Monad.Trans.Resource  (runResourceT)
 import           Data.Tagged                   (Tagged (..))
 import qualified Ether
 import           Mockable                      (runProduction)
@@ -32,8 +31,7 @@ import           Pos.DB.Block                  (runBlockDBRedirect)
 import           Pos.DB.DB                     (runGStateCoreRedirect)
 import           Pos.Delegation.Class          (DelegationVar, askDelegationState)
 import           Pos.Discovery                 (runDiscoveryRedirect)
-import           Pos.Slotting                  (SlottingVar, askSlotting,
-                                                runSlotsDataRedirect, runSlotsRedirect)
+import           Pos.Slotting                  (runSlotsDataRedirect, runSlotsRedirect)
 import           Pos.Ssc.Extra                 (SscMemTag, SscState)
 import           Pos.Ssc.Extra.Class           (askSscMem)
 import           Pos.Txp                       (GenericTxpLocalData, TxpHolderTag,
@@ -60,9 +58,8 @@ nat = do
     nc         <- Ether.ask @NodeContextTag
     modernDB   <- getNodeDBs
     conn       <- getWalletWebSockets
-    slotVar    <- askSlotting
     pure $ NT (convertHandler nc modernDB tlw ssc ws delWrap
-                              psCtx conn slotVar)
+                              psCtx conn)
 
 convertHandler
     :: NodeContext WalletSscType              -- (.. insert monad `m` here ..)
@@ -73,11 +70,10 @@ convertHandler
     -> DelegationVar
     -> PeerStateSnapshot
     -> ConnectionsVar
-    -> SlottingVar
     -> WebHandler a
     -> Handler a
 convertHandler nc modernDBs tlw ssc ws delWrap psCtx
-               conn slotVar handler =
+               conn handler =
     liftIO (realRunner . walletRunner $ handler) `Catch.catches` excHandlers
   where
     walletRunner = runWalletWebDB ws
@@ -86,7 +82,6 @@ convertHandler nc modernDBs tlw ssc ws delWrap psCtx
 
     realRunner :: forall t . RealMode WalletSscType t -> IO t
     realRunner (RealMode act) = runProduction
-           . runResourceT
            . usingLoggerName "wallet-api"
            . runWithoutJsonLogT
            . flip Ether.runReadersT nc
@@ -94,7 +89,6 @@ convertHandler nc modernDBs tlw ssc ws delWrap psCtx
                peerStateCtx <- peerStateFromSnapshot psCtx
                Ether.runReadersT m
                    ( Tagged @NodeDBs modernDBs
-                   , Tagged @SlottingVar slotVar
                    , Tagged @SscMemTag ssc
                    , Tagged @TxpHolderTag tlw
                    , Tagged @DelegationVar delWrap
