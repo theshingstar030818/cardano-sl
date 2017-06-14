@@ -59,7 +59,6 @@ data JLTxS = JLTxS
 -- | Json log of one transaction being received by a node.
 data JLTxR = JLTxR
     { jlrTxId     :: Text
-    , jlrReceived :: Integer
     , jlrError    :: Maybe Text
     } deriving Show
 
