@@ -11,8 +11,12 @@ module Pos.Txp.Network.Listeners
 import qualified Data.HashMap.Strict       as HM
 import           Data.Tagged               (Tagged (..), tagWith)
 import           Formatting                (build, sformat, (%))
+import           Node                      (NodeId (..))
 import           System.Wlog               (logInfo)
 import           Universum
+-- | Logic of Txp.
+
+{-# OPTIONS_GHC -F -pgmF autoexporter #-}
 
 import           Pos.Binary.Communication  ()
 import           Pos.Binary.Relay          ()
@@ -27,7 +31,7 @@ import           Pos.Explorer.Txp.Local    (eTxProcessTransaction)
 #else
 import           Pos.Txp.Logic             (txProcessTransaction)
 #endif
-import           Pos.Txp.MemState          (getMemPool)
+import           Pos.Txp.MemState          (getMemPool, TransactionProvenance (..))
 import           Pos.Txp.Network.Types     (TxMsgContents (..))
 import           Pos.Txp.Toil.Types        (MemPool (..))
 import           Pos.Util.JsonLog          (JLEvent (..), JLTxR (..))
@@ -49,7 +53,7 @@ txInvReqDataParams =
         not . HM.member txId  . _mpLocalTxs <$> getMemPool
     txHandleReq (Tagged txId) =
         fmap TxMsgContents . HM.lookup txId . _mpLocalTxs <$> getMemPool
-    txHandleData (TxMsgContents txAux) = handleTxDo txAux
+    txHandleData peer (TxMsgContents txAux) = handleTxDo peer txAux
 
 txRelays
     :: forall ssc m. WorkMode ssc m
@@ -66,13 +70,15 @@ txRelays = pure $
 -- #txProcessTransaction
 handleTxDo
     :: WorkMode ssc m
-    => TxAux -> m Bool
-handleTxDo txAux = do
+    => NodeId
+    -> TxAux 
+    -> m Bool
+handleTxDo nodeId txAux = do
     let txId = hash (taTx txAux)
 #ifdef WITH_EXPLORER
-    res <- runExceptT $ eTxProcessTransaction (txId, txAux)
+    res <- runExceptT $ eTxProcessTransaction (FromPeer nodeId) (txId, txAux)
 #else
-    res <- runExceptT $ txProcessTransaction (txId, txAux)
+    res <- runExceptT $ txProcessTransaction (FromPeer nodeId) (txId, txAux)
 #endif
     let json me = jsonLog $ JLTxReceived $ JLTxR
             { jlrTxId     = sformat build txId
@@ -89,3 +95,5 @@ handleTxDo txAux = do
                 sformat ("Transaction hasn't been added to storage: "%build%" , reason: "%build) txId er
             json $ Just $ sformat build er
             pure False
+
+instance CanJsonLog m => CanJsonLog (ExceptT e m) where

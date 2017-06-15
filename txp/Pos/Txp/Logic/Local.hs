@@ -20,11 +20,13 @@ import qualified Pos.DB.GState.Common as GS
 import           Pos.Txp.Core         (Tx (..), TxAux (..), TxId)
 import           Pos.Txp.MemState     (MonadTxpMem, TxpLocalDataPure, getLocalTxs,
                                        getUtxoModifier, modifyTxpLocalData,
-                                       setTxpLocalData)
+                                       setTxpLocalData, TransactionProvenance (..),
+                                       MemPoolModifyReason (..))
 import           Pos.Txp.Toil         (GenericToilModifier (..), MonadUtxoRead (..),
                                        ToilEnv, ToilVerFailure (..), Utxo, execToilTLocal,
                                        getToilEnv, normalizeToil, processTx, runDBToil,
                                        runToilTLocal, runUtxoReaderT, utxoGet)
+import           Pos.Util.TimeWarp    (CanJsonLog)
 
 type TxpLocalWorkMode m =
     ( MonadIO m
@@ -32,6 +34,7 @@ type TxpLocalWorkMode m =
     , MonadGState m
     , MonadTxpMem () m
     , WithLogger m
+    , CanJsonLog m
     , MonadError ToilVerFailure m
     )
 
@@ -39,8 +42,10 @@ type TxpLocalWorkMode m =
 -- #processTxDo
 txProcessTransaction
     :: TxpLocalWorkMode m
-    => (TxId, TxAux) -> m ()
-txProcessTransaction itw@(txId, txAux) = do
+    => TransactionProvenance
+    -> (TxId, TxAux) 
+    -> m ()
+txProcessTransaction txProvenance itw@(txId, txAux) = do
     let UnsafeTx {..} = taTx txAux
     tipDB <- GS.getTip
     localUM <- getUtxoModifier @()
@@ -57,7 +62,7 @@ txProcessTransaction itw@(txId, txAux) = do
                    catMaybes $
                    toList $
                    NE.zipWith (liftM2 (,) . Just) _txInputs resolvedOuts
-    pRes <- modifyTxpLocalData $
+    pRes <- modifyTxpLocalData (ProcessTransaction txProvenance) $
             processTxDo resolved toilEnv tipDB itw
     case pRes of
         Left er -> do
@@ -92,10 +97,12 @@ txProcessTransaction itw@(txId, txAux) = do
 -- | 2. Remove invalid transactions from MemPool
 -- | 3. Set new tip to txp local data
 txNormalize
-    :: (MonadIO m, MonadDBRead m, MonadGState m, MonadTxpMem () m) => m ()
-txNormalize = do
+    :: (MonadIO m, MonadDBRead m, MonadGState m, MonadTxpMem () m, CanJsonLog m) 
+    => MemPoolModifyReason
+    -> m ()
+txNormalize reason = do
     utxoTip <- GS.getTip
     localTxs <- getLocalTxs
     ToilModifier {..} <-
         runDBToil $ execToilTLocal mempty def mempty $ normalizeToil localTxs
-    setTxpLocalData (_tmUtxo, _tmMemPool, _tmUndos, utxoTip, _tmExtra)
+    setTxpLocalData reason (_tmUtxo, _tmMemPool, _tmUndos, utxoTip, _tmExtra)

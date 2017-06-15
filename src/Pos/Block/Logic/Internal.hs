@@ -58,7 +58,7 @@ import           Pos.Ssc.Class.Storage   (SscGStateClass)
 import           Pos.Ssc.Extra           (MonadSscMem, sscApplyBlocks, sscNormalize,
                                           sscRollbackBlocks)
 import           Pos.Ssc.Util            (toSscBlock)
-import           Pos.Txp.MemState        (MonadTxpMem)
+import           Pos.Txp.MemState        (MonadTxpMem, MemPoolModifyReason (..))
 import           Pos.Txp.Settings        (TxpBlock, TxpBlund, TxpGlobalSettings (..))
 import           Pos.Update.Context      (UpdateContext)
 import           Pos.Update.Core         (UpdateBlock, UpdatePayload)
@@ -66,6 +66,7 @@ import           Pos.Update.Logic        (usApplyBlocks, usNormalize, usRollback
 import           Pos.Update.Poll         (PollModifier)
 import           Pos.Util                (Some (..), spanSafe)
 import           Pos.Util.Chrono         (NE, NewestFirst (..), OldestFirst (..))
+import           Pos.Util.TimeWarp       (CanJsonLog)
 import           Pos.WorkMode.Class      (TxpExtra_TMP)
 
 -- | Set of basic constraints used by high-level block processing.
@@ -107,6 +108,7 @@ type BlockApplyMode ssc m
        -- Needed for error reporting.
        , MonadReportingMem m
        , MonadDiscovery m
+       , CanJsonLog m
        )
 
 -- | Applies a definitely valid prefix of blocks. This function is unsafe,
@@ -165,9 +167,9 @@ applyBlocksUnsafeDo blunds pModifier = do
         ]
     sscNormalize
 #ifdef WITH_EXPLORER
-    eTxNormalize
+    eTxNormalize ApplyBlock
 #else
-    txNormalize
+    txNormalize ApplyBlock
 #endif
     usNormalize
   where

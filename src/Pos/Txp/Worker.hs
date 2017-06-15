@@ -155,7 +155,7 @@ requestTxs sendActions node txIds = do
                           \(DataMsg dmContents) ->
                             case txInvReqDataParams of
                               InvReqDataParams {..} ->
-                                  handleDataDo contentsToKey handleData dmContents
+                                  handleDataDo contentsToKey (handleData node) dmContents
             for_ txIds $ \(Tagged -> id) ->
                 getTx id `catch` handler id
     logInfo $ sformat

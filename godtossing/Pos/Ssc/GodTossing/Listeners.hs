@@ -112,7 +112,7 @@ sscRelay gtTag contentsToKey toContents processData =
           , handleInv = sscIsDataUseful gtTag . unTagged
           , handleReq =
               \(Tagged addr) -> toContents addr . view ldModifier <$> sscRunLocalQuery ask
-          , handleData = \dat -> do
+          , handleData = \_ dat -> do
                 let addr = contentsToKey dat
                 -- [CSL-685] TODO: Add here malicious emulation for network
                 -- addresses when TW will support getting peer address

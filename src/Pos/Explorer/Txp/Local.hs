@@ -23,13 +23,15 @@ import           Pos.Slotting          (MonadSlots (currentTimeSlotting))
 import           Pos.Txp.Core          (Tx (..), TxAux (..), TxId, toaOut, txOutAddress)
 import           Pos.Txp.MemState      (GenericTxpLocalDataPure, MonadTxpMem,
                                         getLocalTxsMap, getTxpExtra, getUtxoModifier,
-                                        modifyTxpLocalData, setTxpLocalData)
+                                        modifyTxpLocalData, setTxpLocalData,
+                                        MemPoolModifyReason (..), TransactionProvenance (..))
 import           Pos.Txp.Toil          (GenericToilModifier (..), MonadToilEnv,
                                         MonadUtxoRead (..), ToilEnv, ToilVerFailure (..),
                                         Utxo, getToilEnv, runDBToil, runToilTLocalExtra,
                                         runUtxoReaderT, utxoGet)
 import           Pos.Util.Chrono       (NewestFirst (..))
 import qualified Pos.Util.Modifier     as MM
+import           Pos.Util.TimeWarp     (CanJsonLog)
 
 import           Pos.Explorer.Core     (TxExtra (..))
 import           Pos.Explorer.Txp.Toil (ExplorerExtra, ExplorerExtraTxp (..),
@@ -42,6 +44,7 @@ type ETxpLocalWorkMode m =
     , MonadGState m
     , MonadTxpMem ExplorerExtra m
     , WithLogger m
+    , CanJsonLog m
     , MonadError ToilVerFailure m
     , MonadSlots m
     , MonadDBRead m
@@ -68,8 +71,10 @@ instance Monad m => MonadTxExtraRead (ExplorerReaderWrapper (ReaderT ExplorerExt
 
 eTxProcessTransaction
     :: ETxpLocalWorkMode m
-    => (TxId, TxAux) -> m ()
-eTxProcessTransaction itw@(txId, TxAux {taTx = UnsafeTx {..}}) = do
+    => TransactionProvenance
+    -> (TxId, TxAux) 
+    -> m ()
+eTxProcessTransaction txProvenance itw@(txId, TxAux {taTx = UnsafeTx {..}}) = do
     tipBefore <- GS.getTip
     localUM <- getUtxoModifier
     -- Note: snapshot isn't used here, because it's not necessary.  If
@@ -96,7 +101,7 @@ eTxProcessTransaction itw@(txId, TxAux {taTx = UnsafeTx {..}}) = do
     -- with data to update. In case of `TxExtra` data is only added, but never updated,
     -- hence `mempty` here.
     let eet = ExplorerExtraTxp mempty hmHistories hmBalances
-    pRes <- modifyTxpLocalData $
+    pRes <- modifyTxpLocalData (ProcessTransaction txProvenance) $
             processTxDo resolved toilEnv tipBefore itw curTime eet
     case pRes of
         Left er -> do
@@ -144,8 +149,10 @@ eTxProcessTransaction itw@(txId, TxAux {taTx = UnsafeTx {..}}) = do
 --   2. Remove invalid transactions from MemPool
 --   3. Set new tip to txp local data
 eTxNormalize
-    :: (MonadIO m, MonadDBRead m, MonadGState m, MonadTxpMem ExplorerExtra m) => m ()
-eTxNormalize = do
+    :: (MonadIO m, MonadDBRead m, MonadGState m, MonadTxpMem ExplorerExtra m, CanJsonLog m) 
+    => MemPoolModifyReason
+    -> m ()
+eTxNormalize reason = do
     utxoTip <- GS.getTip
     localTxs <- getLocalTxsMap
     extra <- getTxpExtra
@@ -155,4 +162,4 @@ eTxNormalize = do
         runDBToil $
         snd <$>
         runToilTLocalExtra mempty def mempty def (eNormalizeToil toNormalize)
-    setTxpLocalData (_tmUtxo, _tmMemPool, _tmUndos, utxoTip, _tmExtra)
+    setTxpLocalData reason (_tmUtxo, _tmMemPool, _tmUndos, utxoTip, _tmExtra)

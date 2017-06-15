@@ -64,7 +64,9 @@ import           Pos.Txp                      (MonadTxpMem, MonadUtxoRead, Tx (.
                                                filterUtxoByAddrs, flattenTxPayload,
                                                getLocalTxs, runUtxoStateT, topsortTxs,
                                                txOutAddress, utxoGet)
+import           Pos.Txp.MemState.Types       (TransactionProvenance (..))
 import           Pos.Util                     (ether, maybeThrow)
+import           Pos.Util.TimeWarp            (CanJsonLog)
 import           Pos.WorkMode.Class           (TxpExtra_TMP)
 
 -- Remove this once there's no #ifdef-ed Pos.Txp import
@@ -190,6 +192,7 @@ instance
     , MonadGState m
     , MonadThrow m
     , WithLogger m
+    , CanJsonLog m
     , MonadSlots m
     , Ether.MonadReader' GenesisUtxo m
     , MonadTxpMem TxpExtra_TMP m
@@ -243,7 +246,7 @@ instance
         maybe (error "deriveAddrHistory: Nothing") pure mres
 
 #ifdef WITH_EXPLORER
-    saveTx txw = () <$ runExceptT (eTxProcessTransaction txw)
+    saveTx txw = () <$ runExceptT (eTxProcessTransaction History txw)
 #else
-    saveTx txw = () <$ runExceptT (txProcessTransaction txw)
+    saveTx txw = () <$ runExceptT (txProcessTransaction History txw)
 #endif

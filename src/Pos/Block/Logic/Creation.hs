@@ -62,6 +62,8 @@ import           Pos.Ssc.Class              (Ssc (..), SscHelpersClass (sscDefau
 import           Pos.Ssc.Extra              (sscGetLocalPayload, sscResetLocal)
 import           Pos.Txp.Core               (TxAux (..), mkTxPayload, topsortTxs)
 import           Pos.Txp.MemState           (clearTxpMemPool, getLocalTxsNUndo)
+import           Pos.Txp.MemState.Types     (MemPoolModifyReason (..))
+import           Pos.Txp.Network.Listeners  ()
 import           Pos.Update.Core            (UpdatePayload (..))
 import qualified Pos.Update.DB              as UDB
 import           Pos.Update.Logic           (clearUSMemPool, usCanCreateBlock,
@@ -69,12 +71,14 @@ import           Pos.Update.Logic           (clearUSMemPool, usCanCreateBlock,
 import           Pos.Update.Poll            (PollModifier, USUndo)
 import           Pos.Util                   (maybeThrow, _neHead)
 import           Pos.Util.Util              (leftToPanic)
+import           Pos.Util.TimeWarp          (CanJsonLog)
 
 type CreationMode ssc m
      = ( BlockApplyMode ssc m
        , MonadPrimaryKey m
        , Ether.MonadReader' BlkSemaphore m
        , Ether.MonadReader' NodeParams m
+       , CanJsonLog m
        )
 
 ----------------------------------------------------------------------------
@@ -244,7 +248,7 @@ createMainBlockFinish slotId pske prevHeader = do
         verifyBlocksPrefix (one (Right block)) >>=
         either onFailure (const onSuccess)
     clearMempools = do
-        clearTxpMemPool
+        clearTxpMemPool CreateBlock
         sscResetLocal
         clearUSMemPool
         lift $ clearDlgMemPool

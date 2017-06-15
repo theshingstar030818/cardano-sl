@@ -281,7 +281,7 @@ invDataListener InvReqDataParams{..} = listenerConv $ \__ourVerInfo ->
                       send conv $ ReqMsg ne
                       dt' <- fmap limit <$> recv conv
                       whenJust dt' $ expectData $ \DataMsg{..} -> do
-                            handleDataDo contentsToKey handleData dmContents
+                            handleDataDo contentsToKey (handleData __nodeId) dmContents
                             -- handlingLoop
 
                             -- TODO CSL-1148 Improve relaing: support multiple data

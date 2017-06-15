@@ -7,7 +7,6 @@ module Pos.Util.JsonLog
        , JLBlock (..)
        , JLTxS (..)
        , JLTxR (..)
-       , JLMemPool (..)
        , jlCreatedBlock
        , jlAdoptedBlock
        , fromJLSlotId
@@ -15,9 +14,7 @@ module Pos.Util.JsonLog
        ) where
 
 import           Control.Monad.Except          (MonadError)
-import           Data.Aeson                    (FromJSON (..), withObject, (.:),
-                                                (.:?), genericParseJSON)
-import           Data.Aeson.TH                 (deriveJSON, deriveToJSON)
+import           Data.Aeson.TH                 (deriveJSON)
 import           Formatting                    (sformat)
 import           Serokell.Aeson.Options        (defaultOptions)
 import           Universum                     hiding (modify)
@@ -35,7 +32,6 @@ import           Pos.Types                     (SlotId (..), EpochIndex (..),
                                                 LocalSlotIndex (..), mkLocalSlotIndex, 
                                                 gbHeader, gbhPrevBlock, 
                                                 HeaderHash, headerHash, headerHashF)
-import           Pos.Txp.MemState.Types        (MemPoolModifyReason (Custom, Unknown))
 
 type BlockId = Text
 type TxId = Text
@@ -72,79 +68,18 @@ fromJLSlotIdUnsafe x = case fromJLSlotId x of
     Right y -> y
     Left  _ -> error "illegal slot id"
 
--- | Json log of one mempool modification.
-data JLMemPool = JLMemPool
-    { -- | Reason for modifying the mempool
-      jlmReason      :: MemPoolModifyReason
-      -- | Queue length when trying to modify the mempool (not including this
-      --   modifier, so it could be 0).
-    , jlmQueueLength :: Int
-      -- | Time spent waiting for the lock (microseconds)
-    , jlmWait        :: Integer
-      -- | Time spent doing the modification (microseconds, while holding the lock).
-    , jlmModify      :: Integer
-      -- | Size of the mempool before the modification.
-    , jlmSizeBefore  :: Int
-      -- | Size of the mempool after the modification.
-    , jlmSizeAfter   :: Int
-      -- | How much memory was allocated during the modification.
-    , jlmAllocated   :: Int
-    } deriving Show
-
 -- | Json log event.
 data JLEvent = JLCreatedBlock JLBlock
              | JLAdoptedBlock BlockId
              | JLTpsStat Int
              | JLTxSent JLTxS
              | JLTxReceived JLTxR 
-             | JLMemPoolEvent JLMemPool
   deriving (Show, Generic)
 
 $(deriveJSON defaultOptions ''JLBlock)
 $(deriveJSON defaultOptions ''JLTxS)
 $(deriveJSON defaultOptions ''JLTxR)
-$(deriveJSON defaultOptions ''JLMemPool)
-$(deriveToJSON defaultOptions ''JLEvent)
-
-instance FromJSON JLEvent where
-
-    parseJSON = \v -> 
-        (    (genericParseJSON defaultOptions v)
-         -- Second iteration of JLMemPoolEvent: the 'reason' was Text and
-         -- the allocation field was optional.
-         <|> (flip (withObject "JLEvent") v $ \oEvent -> do
-                 oMemPool <- oEvent .: "memPoolEvent"
-                 reason <- oMemPool .: "reason"
-                 queueLength <- oMemPool .: "queueLength"
-                 wait <- oMemPool .: "wait"
-                 modify <- oMemPool .: "modify"
-                 sizeBefore <- oMemPool .: "sizeBefore"
-                 sizeAfter <- oMemPool .: "sizeAfter"
-                 mAllocated <- oMemPool .:? "allocated"
-                 pure $ JLMemPoolEvent $ JLMemPool
-                     { jlmReason = Custom reason
-                     , jlmQueueLength = queueLength
-                     , jlmWait = wait
-                     , jlmModify = modify
-                     , jlmSizeBefore = sizeBefore
-                     , jlmSizeAfter = sizeAfter
-                     , jlmAllocated = fromMaybe 0 mAllocated
-                     }
-             )
-         -- First iteration of JLMemPoolEvent: only the mempool size was recorded.
-         <|> (flip (withObject "JLEvent") v $ \o -> do
-                 sizeAfter <- o .: "memPoolSize"
-                 pure $ JLMemPoolEvent $ JLMemPool
-                     { jlmReason = Unknown
-                     , jlmQueueLength = 0
-                     , jlmWait = 0
-                     , jlmModify = 0
-                     , jlmSizeBefore = 0
-                     , jlmSizeAfter = sizeAfter
-                     , jlmAllocated = 0
-                     }
-             )
-        )
+$(deriveJSON defaultOptions ''JLEvent)
 
 -- | Return event of created block.
 jlCreatedBlock :: BiSsc ssc => Block ssc -> JLEvent

@@ -22,7 +22,7 @@ import           Pos.Communication.Limits.Types (LimitType, MessageLimited, Smar
 import           Pos.Communication.Protocol     (ConversationActions, HandlerSpec (..),
                                                  ListenerSpec (..), Message, NodeId,
                                                  OutSpecs, VerInfo, checkingInSpecs,
-                                                 messageName)
+                                                 messageName, NodeId)
 import           Pos.DB.Class                   (MonadGState)
 
 

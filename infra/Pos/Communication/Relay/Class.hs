@@ -11,6 +11,7 @@ module Pos.Communication.Relay.Class
        ) where
 
 import qualified Ether
+import           Node.Internal                  (NodeId)
 import           Node.Message                   (Message)
 import           Pos.Binary.Class               (Bi)
 import           Universum
@@ -63,7 +64,7 @@ data InvReqDataParams key contents m = InvReqDataParams
       -- ^ Handle inv msg and return whether it's useful or not
     , handleReq     :: key -> m (Maybe contents)
       -- ^ Handle req msg and return (Just data) in case requested data can be provided
-    , handleData    :: contents -> m Bool
+    , handleData    :: NodeId -> contents -> m Bool
       -- ^ Handle data msg and return True if message is to be propagated
     }
 

@@ -9,14 +9,18 @@ module Pos.Txp.MemState.Types
        , TxpLocalDataPure
        , TransactionProvenance (..)
        , MemPoolModifyReason (..)
+       , NodeId
        ) where
 
-import           Data.Aeson.TH      (deriveJSON, defaultOptions)
-import           Universum
+import Data.Aeson         (ToJSON (..), FromJSON (..))
+import Data.Aeson.TH      (deriveJSON, defaultOptions)
+import Network.Transport  (EndPointAddress (..))
+import Node.Internal      (NodeId (..))
+import Prelude            (Show (..), reads)
+import Universum          hiding (show)
 
-import           Pos.Core.Types     (HeaderHash)
-import           Pos.Communication.Types.Protocol (PeerId)
-import           Pos.Txp.Toil.Types (MemPool, UndoMap, UtxoModifier)
+import Pos.Core.Types     (HeaderHash)
+import Pos.Txp.Toil.Types (MemPool, UndoMap, UtxoModifier)
 
 -- | LocalData of transactions processing.
 -- There are two invariants which must hold for local data
@@ -47,8 +51,20 @@ type TxpLocalData = GenericTxpLocalData ()
 -- | Pure version of TxpLocalData.
 type TxpLocalDataPure = GenericTxpLocalDataPure ()
 
-data TransactionProvenance = FromPeer PeerId | History
+data TransactionProvenance = FromPeer NodeId | History
   deriving Show
+
+instance ToJSON NodeId where
+
+    toJSON (NodeId (EndPointAddress b)) = toJSON $ show b
+
+instance FromJSON NodeId where
+
+    parseJSON v = do
+        s <- parseJSON v
+        case reads s of
+            [(b, "")] -> return $ NodeId $ EndPointAddress b
+            _         -> empty
 
 $(deriveJSON defaultOptions ''TransactionProvenance)
 

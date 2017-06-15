@@ -72,6 +72,8 @@ library
                      , log-warper
                      , mtl
                      , neat-interpolation
+                     , network-transport
+                     , node-sketch
                      , plutus-prototype
                      , rocksdb
                      , serokell-util

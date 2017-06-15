@@ -42,7 +42,7 @@ proposalRelay =
            { contentsToKey = \(up, _) -> pure . tag  $ hash up
            , handleInv = isProposalNeeded . unTagged
            , handleReq = getLocalProposalNVotes . unTagged
-           , handleData = \(proposal, votes) -> do
+           , handleData = \_ (proposal, votes) -> do
                  res <- processProposal proposal
                  logProp res
                  let processed = isRight res
@@ -75,7 +75,7 @@ voteRelay =
                  pure $ tag (uvProposalId, uvKey, uvDecision)
            , handleInv = \(Tagged (id, pk, dec)) -> isVoteNeeded id pk dec
            , handleReq = \(Tagged (id, pk, dec)) -> getLocalVote id pk dec
-           , handleData = \uv -> do
+           , handleData = \_ uv -> do
                  res <- processVote uv
                  logProcess res
                  pure $ isRight res
