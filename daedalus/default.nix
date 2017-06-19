@@ -1,4 +1,4 @@
-with (import (fetchTarball https://github.com/NixOS/nixpkgs/archive/8bed8fb53227932886ab23e5f5f9eabe139f8e9f.tar.gz) {});
+with (import (fetchTarball https://github.com/NixOS/nixpkgs/archive/0d4431cfe90b2242723ccb1ccc90714f2f68a609.tar.gz) {});
 
 stdenv.mkDerivation {
   name = "daedalus-bridge";
