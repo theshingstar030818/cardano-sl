@@ -7,8 +7,8 @@ module Pos.Communication.Specs
 import           Node.Message.Class            (Message (..))
 import           Universum
 
+import           Network.Broadcast.Relay       (InvOrData, ReqMsg)
 import           Pos.Communication.Protocol    (OutSpecs, convH, toOutSpecs)
-import           Pos.Communication.Types.Relay (InvOrData, ReqMsg)
 
 createOutSpecs :: forall key contents .
                ( Message (InvOrData key contents)

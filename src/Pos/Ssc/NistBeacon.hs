@@ -58,7 +58,8 @@ instance SscWorkersClass SscNistBeacon where
     sscLrcConsumers = []
 
 instance SscListenersClass SscNistBeacon where
-    sscRelays = Tagged []
+    sscRelays _ = Tagged []
+    sscRelayMkListeners _ = error "sscRelayMkListeners not defined for NistBeacon"
 
 instance SscLocalDataClass SscNistBeacon where
     sscGetLocalPayloadQ _ = pure ()

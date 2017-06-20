@@ -6,17 +6,13 @@ import           Data.DeriveTH                    (derive, makeArbitrary)
 import           Node.Message.Class               (MessageName (..))
 import           Test.QuickCheck                  (Arbitrary (..), choose, oneof)
 import           Universum
+import           Network.Broadcast.Relay.Types    (InvMsg (..), ReqMsg (..))
 
 import           Pos.Communication.Types.Protocol (HandlerSpec (..), VerInfo (..))
-import           Pos.Communication.Types.Relay    (InvMsg (..), MempoolMsg (..),
-                                                   ReqMsg (..))
 import           Pos.Types.Arbitrary              ()
 
 instance (Arbitrary key) => Arbitrary (ReqMsg key) where
     arbitrary = ReqMsg <$> arbitrary
-
-instance Arbitrary (MempoolMsg tag) where
-    arbitrary = pure MempoolMsg
 
 instance (Arbitrary key) => Arbitrary (InvMsg key) where
     arbitrary = InvMsg <$> arbitrary

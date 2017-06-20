@@ -6,16 +6,17 @@ module Pos.Communication.Methods
        , sendUpdateProposal
        ) where
 
+import           Data.Tagged                (tagWith)
 import           Formatting                 (sformat, (%))
 import           System.Wlog                (logInfo)
 import           Universum
+import           Network.Broadcast.Relay    (invReqDataConversation_)
 
 import           Pos.Binary.Communication   ()
 import           Pos.Binary.Core            ()
 import           Pos.Binary.Relay           ()
 import           Pos.Communication.Message  ()
-import           Pos.Communication.Protocol (NodeId, SendActions)
-import           Pos.Communication.Relay    (invReqDataFlowTK)
+import           Pos.Communication.Protocol (NodeId, SendActions, withConnectionTo', Conversation (..))
 import           Pos.Crypto                 (hash, hashHexF)
 import           Pos.DB.Class               (MonadGState)
 import           Pos.Txp.Core.Types         (TxAux (..))
@@ -28,20 +29,21 @@ import           Pos.WorkMode.Class         (MinWorkMode)
 sendTx
     :: (MinWorkMode m, MonadGState m)
     => SendActions m -> NodeId -> TxAux -> m ()
-sendTx sendActions addr txAux =
-    invReqDataFlowTK
-        "tx"
-        sendActions
-        addr
-        (hash $ taTx txAux)
-        (TxMsgContents txAux)
+sendTx sendActions addr txAux = withConnectionTo' sendActions addr $ \_ ->
+    Conversation (invReqDataConversation_ key value)
+  where
+    key = tagWith (Proxy @TxMsgContents) (hash (taTx txAux))
+    value = TxMsgContents txAux
 
 -- Send UpdateVote to given address.
 sendVote
     :: (MinWorkMode m, MonadGState m)
     => SendActions m -> NodeId -> UpdateVote -> m ()
-sendVote sendActions addr vote =
-    invReqDataFlowTK "UpdateVote" sendActions addr (mkVoteId vote) vote
+sendVote sendActions addr vote = withConnectionTo' sendActions addr $ \_ ->
+    Conversation (invReqDataConversation_ key value)
+  where
+    key = tagWith (Proxy @UpdateVote) (mkVoteId vote)
+    value = vote
 
 -- Send UpdateProposal to given address.
 sendUpdateProposal
@@ -54,9 +56,8 @@ sendUpdateProposal
     -> m ()
 sendUpdateProposal sendActions addr upid proposal votes = do
     logInfo $ sformat ("Announcing proposal with id "%hashHexF) upid
-    invReqDataFlowTK
-        "UpdateProposal"
-        sendActions
-        addr
-        upid
-        (proposal, votes)
+    withConnectionTo' sendActions addr $ \_ ->
+        Conversation (invReqDataConversation_ key value)
+  where
+    key = tagWith (Proxy @(UpdateProposal, [UpdateVote])) upid
+    value = (proposal, votes)

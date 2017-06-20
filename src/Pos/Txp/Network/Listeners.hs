@@ -5,21 +5,26 @@
 
 module Pos.Txp.Network.Listeners
        ( txRelays
+       , txRelayMkListeners
        , txInvReqDataParams
        ) where
 
 import qualified Data.HashMap.Strict       as HM
-import           Data.Tagged               (Tagged (..), tagWith)
+import           Data.Tagged               (Tagged (..))
 import           Formatting                (build, sformat, (%))
 import           System.Wlog               (logInfo)
 import           Universum
+import           Network.Broadcast.Relay   (InvReqDataParams (..), Relay (..),
+                                            PropagationMsg, handleReqL,
+                                            handleInvL)
 
+import           Pos.Communication.Protocol (PackingType, MkListeners,
+                                             constantListeners)
+import           Pos.Communication.Listener (listenerConv)
 import           Pos.Binary.Communication  ()
 import           Pos.Binary.Relay          ()
 import           Pos.Communication.Limits  ()
 import           Pos.Communication.Message ()
-import           Pos.Communication.Relay   (InvReqDataParams (..), MempoolParams (..),
-                                            Relay (..))
 import           Pos.Crypto                (hash)
 import           Pos.Txp.Core.Types        (TxAux (..), TxId)
 #ifdef WITH_EXPLORER
@@ -37,9 +42,9 @@ txInvReqDataParams :: WorkMode ssc m
 txInvReqDataParams =
     InvReqDataParams
        { contentsToKey = txContentsToKey
-       , handleInv = txHandleInv
-       , handleReq = txHandleReq
-       , handleData = txHandleData
+       , handleInv = \_ -> txHandleInv
+       , handleReq = \_ -> txHandleReq
+       , handleData = \_ -> txHandleData
        }
   where
     txContentsToKey = pure . Tagged . hash . taTx . getTxMsgContents
@@ -51,13 +56,19 @@ txInvReqDataParams =
 
 txRelays
     :: forall ssc m. WorkMode ssc m
-    => [Relay m]
-txRelays = pure $
-    InvReqData (KeyMempool (Proxy :: Proxy TxMsgContents)
-                           (map tag . HM.keys . _mpLocalTxs <$> getMemPool)) $
-               txInvReqDataParams
-  where
-    tag = tagWith (Proxy :: Proxy TxMsgContents)
+    => (PropagationMsg PackingType -> m ())
+    -> [Relay PackingType m]
+txRelays propagate =
+    [InvReqData propagate txInvReqDataParams]
+
+txRelayMkListeners
+    :: forall ssc m. WorkMode ssc m
+    => (PropagationMsg PackingType -> m ())
+    -> MkListeners m
+txRelayMkListeners propagate = constantListeners [
+      listenerConv (handleReqL (handleReq txInvReqDataParams))
+    , listenerConv (handleInvL propagate txInvReqDataParams)
+    ]
 
 -- Real tx processing
 -- CHECK: @handleTxDo

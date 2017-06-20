@@ -8,9 +8,9 @@ import           Universum
 
 import           Data.DeriveTH                 (derive, makeArbitrary)
 import           Test.QuickCheck               (Arbitrary (..))
+import           Network.Broadcast.Relay.Types (DataMsg (..))
 
 import           Pos.Binary.Update             ()
-import           Pos.Communication.Types.Relay (DataMsg (..))
 import           Pos.Txp.Core                  (TxAux (..))
 import           Pos.Txp.Network.Types         (TxMsgContents (..))
 import           Pos.Types.Arbitrary           ()

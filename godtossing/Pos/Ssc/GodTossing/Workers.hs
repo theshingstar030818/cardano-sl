@@ -15,12 +15,12 @@ import           Control.Monad.Except                  (runExceptT)
 import           Control.Monad.Trans.Maybe             (runMaybeT)
 import qualified Data.HashMap.Strict                   as HM
 import qualified Data.List.NonEmpty                    as NE
-import           Data.Tagged                           (Tagged)
+import           Data.Tagged                           (Tagged, tagWith)
 import           Data.Time.Units                       (Microsecond, Millisecond,
                                                         convertUnit)
 import qualified Ether
 import           Formatting                            (build, ords, sformat, shown, (%))
-import           Mockable                              (currentTime, delay)
+import           Mockable                              (currentTime, delay, forConcurrently)
 import           Serokell.Util.Exceptions              ()
 import           Serokell.Util.Text                    (listJson)
 import           System.Wlog                           (logDebug, logError, logInfo,
@@ -32,11 +32,14 @@ import           Pos.Binary.Infra                      ()
 import           Pos.Communication.MessagePart         (MessagePart)
 import           Pos.Communication.Protocol            (Message, OutSpecs, SendActions,
                                                         Worker', WorkerSpec,
-                                                        onNewSlotWorker)
-import           Pos.Communication.Relay               (DataMsg, ReqMsg,
-                                                        invReqDataFlowNeighborsTK)
+                                                        onNewSlotWorker, withConnectionTo',
+                                                        Conversation (..))
+import           Pos.Discovery                         (getPeers)
+import           Network.Broadcast.Relay               (DataMsg, ReqMsg,
+                                                        InvOrData,
+                                                        InvOrDataTK,
+                                                        invReqDataConversation_)
 import           Pos.Communication.Specs               (createOutSpecs)
-import           Pos.Communication.Types.Relay         (InvOrData, InvOrDataTK)
 import           Pos.Core                              (EpochIndex, SlotId (..),
                                                         StakeholderId, StakeholderId,
                                                         Timestamp (..), addressHash,
@@ -141,7 +144,12 @@ checkNSendOurCert sendActions = do
             ourVssCertificate <- getOurVssCertificate slot
             let contents = MCVssCertificate ourVssCertificate
             sscProcessOurMessage (sscProcessCertificate ourVssCertificate)
-            invReqDataFlowNeighborsTK "ssc" sendActions ourId contents
+            -- Broadcast the tagged key and value to neighbours.
+            let key = tagWith (Proxy @MCVssCertificate) ourId
+                value = contents
+            targets <- getPeers
+            void $ forConcurrently (toList targets) $ \peer -> withConnectionTo' sendActions peer $ \_ ->
+                Conversation (invReqDataConversation_ key value)
             logDebug "Announced our VssCertificate."
 
     slMaybe <- getCurrentSlot
@@ -270,6 +278,7 @@ sscProcessOurMessage action =
         sformat ("We have rejected our message, reason: "%build) er
 
 sendOurData ::
+    forall contents m .
     ( SscMode SscGodTossing m
     , MessagePart contents
     , Bi (DataMsg contents)
@@ -290,7 +299,15 @@ sendOurData sendActions msgTag ourId dt epoch slMultiplier = do
     -- type of message.
     waitUntilSend msgTag epoch slMultiplier
     logInfo $ sformat ("Announcing our "%build) msgTag
-    invReqDataFlowNeighborsTK "ssc" sendActions ourId dt
+    -- Use the relay mechanism to broadcast our data.
+    -- NB: 'sendActions' is not of the time-warp-nt 'SendActions' type! It's
+    -- the special cardano-sl type. So we have to manually wire up the
+    -- relay broadcast conversation.
+    let key = tagWith (Proxy @contents) ourId
+        value = dt
+    targets <- getPeers
+    void $ forConcurrently (toList targets) $ \peer -> withConnectionTo' sendActions peer $ \_ ->
+        Conversation (invReqDataConversation_ key value)
     logDebug $ sformat ("Sent our " %build%" to neighbors") msgTag
 
 -- Generate new commitment and opening and use them for the current

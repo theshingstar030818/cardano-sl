@@ -11,9 +11,11 @@ module Pos.Communication.Types.Protocol
        , PeerData
        , PackingType
        , SendActions (..)
+       , withConnectionTo'
        , Conversation (..)
        , N.ConversationActions (..)
        , Listener
+       , ListenerAction
        , listenerMessageName
        , Action
        , Action'
@@ -51,6 +53,7 @@ type PackingType = BiP
 type PeerData = VerInfo
 
 type Listener = N.Listener PackingType PeerData
+type ListenerAction snd rcv m = N.ListenerAction PeerData snd rcv m
 type Worker m = Action m ()
 type Action m a = NSendActions m -> m a
 type Action' m a = SendActions m -> m a
@@ -74,6 +77,13 @@ data SendActions m = SendActions {
         -> (PeerData -> NonEmpty (Conversation m t))
         -> m t
     }
+
+-- | Use a typical (time-warp) conversation against the special 'SendActions'.
+withConnectionTo'
+    :: SendActions m
+    -> (forall t . N.NodeId -> (PeerData -> Conversation m t) -> m t)
+withConnectionTo' sactions peer k = withConnectionTo sactions peer $ \pd ->
+    k pd :| []
 
 -- FIXME do not demand Message on rcv. That's only done for the benefit of
 -- this in- and out-spec motif. See TW-152.
@@ -150,7 +160,7 @@ data ListenerSpec m = ListenerSpec
 
 -- | The MessageName that the listener responds to.
 listenerMessageName :: forall m . Listener m -> MessageName
-listenerMessageName (N.ListenerActionConversation (_ :: PeerData -> N.NodeId -> N.ConversationActions snd rcv m -> m ())) =
+listenerMessageName (N.Listener (_ :: PeerData -> N.NodeId -> N.ConversationActions snd rcv m -> m ())) =
     messageName (Proxy @rcv)
 
 newtype InSpecs = InSpecs HandlerSpecs
@@ -193,6 +203,9 @@ data MkListeners m = MkListeners
         -- ^ Aggregated specs for what we accept on incoming connections
         , outSpecs    :: OutSpecs
         -- ^ Aggregated specs for which outgoing connections we might initiate
+        --
+        -- TBD Is this ever not mempty? It's a listener, it doesn't establish
+        -- connections.
         }
 
 instance Monad m => Monoid (MkListeners m) where

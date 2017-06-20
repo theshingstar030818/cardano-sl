@@ -9,9 +9,9 @@ import           Universum
 import           Data.Tagged                      (Tagged)
 import           Node.Message.Class               (Message)
 
+import           Network.Broadcast.Relay.Types    (DataMsg, InvOrData, ReqMsg)
 import           Pos.Communication.Limits.Types   (MessageLimited)
 import           Pos.Communication.MessagePart    (MessagePart)
-import           Pos.Communication.Types.Relay    (DataMsg, InvOrData, ReqMsg)
 import           Pos.Core                         (StakeholderId)
 import           Pos.Ssc.GodTossing.Types.Message (MCCommitment, MCOpening, MCShares,
                                                    MCVssCertificate)
@@ -29,12 +29,12 @@ type GtMessageConstraints =
         , DataMsg MCOpening
         , DataMsg MCShares
         , DataMsg MCVssCertificate ]
-    , Each '[Message]
+    , Each '[Message, MessageLimited]
         [ InvOrData (Tagged MCCommitment     StakeholderId) MCCommitment
         , InvOrData (Tagged MCOpening        StakeholderId) MCOpening
         , InvOrData (Tagged MCShares         StakeholderId) MCShares
         , InvOrData (Tagged MCVssCertificate StakeholderId) MCVssCertificate ]
-    , Each '[Message]
+    , Each '[Message, MessageLimited]
         [ ReqMsg (Tagged MCCommitment     StakeholderId)
         , ReqMsg (Tagged MCOpening        StakeholderId)
         , ReqMsg (Tagged MCShares         StakeholderId)

@@ -4,8 +4,11 @@ module Pos.Communication.Server
        ( allListeners
        , serverLoggerName
        , sscRelays
+       , sscRelayMkListeners
        , txRelays
+       , txRelayMkListeners
        , delegationRelays
+       , delegationRelayMkListeners
        , usRelays
        ) where
 
@@ -13,28 +16,30 @@ import           Universum
 
 import           Data.Tagged                 (untag)
 import           System.Wlog                 (LoggerName)
+import           Network.Broadcast.Relay     (PropagationMsg)
 
 import           Pos.Binary.Communication    ()
 import           Pos.Block.Network.Listeners (blockListeners)
+import           Pos.Communication.Types.Protocol (PackingType)
 import           Pos.Communication.Protocol  (MkListeners (..))
-import           Pos.Communication.Relay     (relayListeners)
 import           Pos.Communication.Util      (wrapListener)
-import           Pos.Delegation.Listeners    (delegationRelays)
+import           Pos.Delegation.Listeners    (delegationRelays, delegationRelayMkListeners)
 import           Pos.Ssc.Class               (SscListenersClass (..), SscWorkersClass)
-import           Pos.Txp                     (txRelays)
-import           Pos.Update                  (usRelays)
+import           Pos.Txp                     (txRelayMkListeners, txRelays)
+import           Pos.Update                  (usRelays, usRelayMkListeners)
 import           Pos.WorkMode.Class          (WorkMode)
 
 -- | All listeners running on one node.
 allListeners
     :: (SscListenersClass ssc, SscWorkersClass ssc, WorkMode ssc m)
-    => MkListeners m
-allListeners = mconcat
+    => (PropagationMsg PackingType -> m ())
+    -> MkListeners m
+allListeners propagate = mconcat
         [ modifier "block"       $ blockListeners
-        , modifier "ssc"         $ relayListeners (untag sscRelays)
-        , modifier "tx"          $ relayListeners txRelays
-        , modifier "delegation"  $ relayListeners delegationRelays
-        , modifier "update"      $ relayListeners usRelays
+        , modifier "tx"          $ txRelayMkListeners propagate
+        , modifier "delegation"  $ delegationRelayMkListeners propagate
+        , modifier "update"      $ usRelayMkListeners propagate
+        , modifier "ssc"         $ untag (sscRelayMkListeners propagate)
         ]
   where
     modifier lname mkL = mkL { mkListeners = mkListeners' }

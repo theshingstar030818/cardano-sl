@@ -12,7 +12,7 @@ import           Universum
 import qualified Network.Transport.TCP   as TCP
 import           System.Wlog             (LoggerName)
 
-import           Pos.Communication.Types (NodeId)
+import           Pos.Communication.Types.Protocol (NodeId)
 import           Pos.Crypto              (SecretKey)
 import           Pos.DHT.Real            (KademliaParams)
 import           Pos.Security.Params     (SecurityParams)

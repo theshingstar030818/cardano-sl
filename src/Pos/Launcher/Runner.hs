@@ -7,6 +7,7 @@ module Pos.Launcher.Runner
        ( -- * High level runners
          runRealMode
        , runRealBasedMode
+       , runToProd
 
        -- * Exported for custom usage in CLI utils
        , runServer
@@ -67,11 +68,11 @@ runRealBasedMode
     -> (ActionSpec m a, OutSpecs)
     -> Production a
 runRealBasedMode unwrap wrap nr@NodeResources {..} (ActionSpec action, outSpecs) =
-    runRealModeDo (hoistNodeResources unwrap nr) listeners outSpecs $
+    runRealModeDo (hoistNodeResources unwrap wrap nr) listeners outSpecs $
     ActionSpec $ \vI sendActions ->
         unwrap . action vI $ hoistSendActions wrap unwrap sendActions
   where
-    listeners = hoistMkListeners unwrap wrap allListeners
+    listeners = hoistMkListeners unwrap wrap (allListeners nrPropagate)
 
 -- | RealMode runner.
 runRealModeDo
@@ -82,7 +83,7 @@ runRealModeDo
     -> OutSpecs
     -> ActionSpec (RealMode ssc) a
     -> Production a
-runRealModeDo NodeResources {..} listeners outSpecs action =
+runRealModeDo nr@NodeResources {..} listeners outSpecs action =
     specialDiscoveryWrapper $ do
         ekgStore <- liftIO $ Metrics.newStore
         -- To start monitoring, add the time-warp metrics and the GC
@@ -90,7 +91,7 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
         let startMonitoring node' = case lpEkgPort of
                 Nothing   -> return Nothing
                 Just port -> Just <$> do
-                        ekgStore' <- setupMonitor (runProduction . runToProd JsonLogDisabled)
+                        ekgStore' <- setupMonitor (runProduction . runToProd nr JsonLogDisabled)
                             node' ekgStore
                         liftIO $ Metrics.registerGcMetrics ekgStore'
                         liftIO $ Monitoring.forkServerWith ekgStore' "127.0.0.1" port
@@ -101,7 +102,7 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
             jsonLogConfigFromHandle
             nrJLogHandle
 
-        runToProd jsonLogConfig $
+        runToProd nr jsonLogConfig $
             runServer nrTransport listeners outSpecs
             startMonitoring stopMonitoring action
   where
@@ -114,17 +115,26 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
         DCStatic _          -> identity
         DCKademlia kademlia -> foreverRejoinNetwork kademlia
 
-    runToProd :: forall t . JsonLogConfig -> RealMode ssc t -> Production t
-    runToProd jlConf act = Mtl.runReaderT (unRealMode act) $
-        RealModeContext
-            nrDBs
-            nrSscState
-            nrTxpState
-            nrDlgState
-            nrPeerState
-            jlConf
-            lpRunnerTag
-            nrContext
+runToProd
+    :: forall ssc t .
+       NodeResources ssc (RealMode ssc)
+    -> JsonLogConfig
+    -> RealMode ssc t
+    -> Production t
+runToProd NodeResources {..} jlConf act = Mtl.runReaderT (unRealMode act) $
+    RealModeContext
+        nrDBs
+        nrSscState
+        nrTxpState
+        nrDlgState
+        nrPeerState
+        jlConf
+        lpRunnerTag
+        nrContext
+  where
+    NodeContext {..} = nrContext
+    NodeParams {..} = ncNodeParams
+    LoggingParams {..} = bpLoggingParams npBaseParams
 
 runServer
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)

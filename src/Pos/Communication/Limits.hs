@@ -20,12 +20,12 @@ import           Crypto.Hash                        (Blake2b_224, Blake2b_256)
 import qualified Crypto.PVSS                        as PVSS
 import           Data.Coerce                        (coerce)
 import           GHC.Exts                           (IsList (..))
+import           Network.Broadcast.Relay.Types      (DataMsg (..))
 
 import           Pos.Binary.Class                   (AsBinary (..))
 import           Pos.Block.Core                     (Block, BlockHeader)
 import           Pos.Block.Network.Types            (MsgBlock (..), MsgGetBlocks (..),
                                                      MsgGetHeaders (..), MsgHeaders (..))
-import           Pos.Communication.Types.Relay      (DataMsg (..))
 import qualified Pos.Constants                      as Const
 import           Pos.Core                           (BlockVersionData (..),
                                                      coinPortionToDouble)

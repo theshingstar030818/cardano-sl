@@ -24,8 +24,8 @@ import           Pos.Constants       (isDevelopment)
 import           Pos.Context         (MonadNodeContext)
 import           Pos.Core.Types      (Timestamp (..))
 import           Pos.Launcher        (NodeParams (..), NodeResources (..),
-                                      bracketNodeResources, hoistNodeResources, runNode,
-                                      runNodeReal)
+                                      bracketNodeResources, hoistNodeResources,
+                                      runNode, runNodeReal)--, runToProd)
 import           Pos.Security        (SecurityWorkersClass)
 import           Pos.Shutdown        (triggerShutdown)
 import           Pos.Ssc.Class       (SscConstraint, SscParams)
@@ -36,6 +36,7 @@ import           Pos.Update.Context  (ucUpdateSemaphore)
 import           Pos.Util            (inAssertMode)
 import           Pos.Util.UserSecret (usVss)
 import           Pos.Util.Util       (powerLift)
+--import           Pos.Util.JsonLog    (JsonLogConfig (..))
 import           Pos.WorkMode        (RealMode, WorkMode)
 #ifdef WITH_WEB
 import           Pos.Web             (serveWebGT)
@@ -81,12 +82,18 @@ actionWithWallet :: SscParams SscGodTossing -> NodeParams -> Args -> Production 
 actionWithWallet sscParams nodeParams args@Args {..} =
     bracketWalletWebDB walletDbPath walletRebuildDb $ \db ->
         bracketWalletWS $ \conn -> do
-            bracketNodeResources nodeParams sscParams $ \nr@NodeResources {..} ->
-                runWRealMode
-                    db
-                    conn
-                    (hoistNodeResources powerLift nr)
-                    (runNode @SscGodTossing nrContext plugins)
+            bracketNodeResources nodeParams sscParams $ \(nr :: NodeResources SscGodTossing Production) ->
+                let unlift :: forall a . WalletWebMode a -> Production a
+                    unlift = error "how do I do this?"
+                    lift_ :: forall a . Production a -> WalletWebMode a
+                    lift_ = powerLift
+                    nr' :: NodeResources SscGodTossing WalletWebMode
+                    nr'@NodeResources {..} = hoistNodeResources lift_ unlift nr
+                in  runWRealMode
+                      db
+                      conn
+                      nr'
+                      (runNode @SscGodTossing nrContext nr' plugins)
   where
     convPlugins = (, mempty) . map (\act -> ActionSpec $ \__vI __sA -> act)
     plugins :: ([WorkerSpec WalletWebMode], OutSpecs)

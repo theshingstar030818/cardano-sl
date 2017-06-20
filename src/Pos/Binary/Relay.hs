@@ -3,12 +3,12 @@
 module Pos.Binary.Relay () where
 
 import           Universum
+import           Network.Broadcast.Relay.Types (DataMsg (..))
 
 import           Pos.Binary.Class              (Bi (..), label)
 import           Pos.Binary.Crypto             ()
 import           Pos.Binary.Ssc                ()
 import           Pos.Binary.Update             ()
-import           Pos.Communication.Types.Relay (DataMsg (..))
 import           Pos.Crypto                    (hash)
 import           Pos.Delegation.Types          (ProxySKLightConfirmation)
 import           Pos.Types                     (ProxySKHeavy, ProxySKLight)

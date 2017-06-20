@@ -15,8 +15,8 @@ import qualified Pos.Communication.Constants    as Const
 import           Pos.Communication.Limits.Types (Limit (..),
                                                  MessageLimited (..),
                                                  MessageLimitedPure (..))
-import           Pos.Communication.Types.Relay  (DataMsg (..), InvMsg, InvOrData,
-                                                 MempoolMsg (..), ReqMsg)
+import           Network.Broadcast.Relay.Types  (DataMsg (..), InvMsg, InvOrData,
+                                                 ReqMsg)
 
 ----------------------------------------------------------------------------
 -- Instances of MessageLimited for the relay types.
@@ -24,7 +24,6 @@ import           Pos.Communication.Types.Relay  (DataMsg (..), InvMsg, InvOrData
 
 instance MessageLimited (InvMsg key)
 instance MessageLimited (ReqMsg key)
-instance MessageLimited (MempoolMsg tag)
 
 instance MessageLimited (DataMsg contents)
       => MessageLimited (InvOrData key contents) where
@@ -43,6 +42,3 @@ instance MessageLimitedPure (InvMsg key) where
 
 instance MessageLimitedPure (ReqMsg key) where
     msgLenLimit = Limit Const.maxReqSize
-
-instance MessageLimitedPure (MempoolMsg tag) where
-    msgLenLimit = Limit Const.maxMempoolMsgSize

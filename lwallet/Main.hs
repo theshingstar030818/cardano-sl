@@ -24,6 +24,7 @@ import           Data.Time.Units            (convertUnit)
 import           Formatting                 (build, int, sformat, stext, (%))
 import           Mockable                   (Production, delay, runProduction)
 import           Network.Transport.Abstract (Transport, hoistTransport)
+import           Network.Broadcast.Relay    (DataMsg (..))
 import           System.IO                  (hFlush, stdout)
 import           System.Wlog                (logDebug, logError, logInfo, logWarning)
 #if !(defined(mingw32_HOST_OS))
@@ -36,10 +37,13 @@ import           Universum
 import           Pos.Binary                 (Raw, encodeStrict)
 import qualified Pos.CLI                    as CLI
 import           Pos.Communication          (NodeId, OutSpecs, SendActions, Worker',
-                                             WorkerSpec, dataFlow, delegationRelays,
-                                             relayPropagateOut, submitTx,
-                                             submitUpdateProposal, submitVote, txRelays,
-                                             usRelays, worker)
+                                             WorkerSpec, delegationRelays,
+                                             submitTx, withConnectionTo',
+                                             ConversationActions (..),
+                                             Conversation (..),
+                                             relayOutSpecs,
+                                             submitUpdateProposal, submitVote,
+                                             txRelays, usRelays, worker)
 import           Pos.Constants              (genesisBlockVersionData, isDevelopment)
 import           Pos.Crypto                 (Hash, SecretKey, SignTag (SignUSVote),
                                              emptyPassphrase, encToPublic, fakeSigner,
@@ -216,7 +220,7 @@ runCmd sendActions (DelegateLight i delegatePk startEpoch lastEpochM) = do
         Just ss -> do
           let psk = safeCreateProxySecretKey ss delegatePk (startEpoch, fromMaybe 1000 lastEpochM)
           for_ na $ \nodeId ->
-             dataFlow "pskLight" sendActions nodeId psk
+             dataFlow ("pskLight" :: String) sendActions nodeId psk
    putText "Sent lightweight cert"
 runCmd sendActions (DelegateHeavy i delegatePk curEpoch) = do
    CmdCtx{na} <- ask
@@ -226,7 +230,7 @@ runCmd sendActions (DelegateHeavy i delegatePk curEpoch) = do
         Just ss -> do
           let psk = safeCreateProxySecretKey ss delegatePk curEpoch
           for_ na $ \nodeId ->
-             dataFlow "pskHeavy" sendActions nodeId psk
+             dataFlow ("pskHeavy" :: String) sendActions nodeId psk
    putText "Sent heavyweight cert"
 runCmd _ (AddKeyFromPool i) = do
    CmdCtx{..} <- ask
@@ -237,12 +241,16 @@ runCmd _ (AddKeyFromFile f) = do
     mapM_ addSecretKey $ secret ^. usKeys
 runCmd _ Quit = pure ()
 
+dataFlow _ sendActions nodeId dt = withConnectionTo' sendActions nodeId
+    (const (Conversation $ \(conv :: ConversationActions (DataMsg contents) Void m) ->
+        send conv $ DataMsg dt))
+
 -- This solution is hacky, but will work for now
 runCmdOuts :: OutSpecs
-runCmdOuts = relayPropagateOut $ mconcat
-                [ usRelays @(RealMode SscGodTossing)
-                , delegationRelays @SscGodTossing @(RealMode SscGodTossing)
-                , txRelays @SscGodTossing @(RealMode SscGodTossing)
+runCmdOuts = mconcat
+                [ mconcat (relayOutSpecs <$> usRelays @(RealMode SscGodTossing) (error ""))
+                , mconcat (relayOutSpecs <$> delegationRelays @SscGodTossing @(RealMode SscGodTossing) (error ""))
+                , mconcat (relayOutSpecs <$> txRelays @SscGodTossing @(RealMode SscGodTossing) (error ""))
                 ]
 
 evalCmd :: WalletMode m => SendActions m -> Command -> CmdRunner m ()

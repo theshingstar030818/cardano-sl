@@ -56,7 +56,6 @@ library
                         Pos.Communication.Constants
                         Pos.Communication.Types.Protocol
                         Pos.Communication.Types.State
-                        Pos.Communication.Types.Relay
                         Pos.Communication.BiP
                         Pos.Communication.Limits.Types
                         Pos.Communication.Limits.Instances
@@ -65,11 +64,6 @@ library
                         Pos.Communication.PeerState
                         Pos.Communication.Protocol
                         Pos.Communication.Specs
-                        Pos.Communication.Relay
-                        Pos.Communication.Relay.Class
-                        Pos.Communication.Relay.Logic
-                        Pos.Communication.Relay.Types
-                        Pos.Communication.Relay.Util
                         Pos.Communication.Util
 
                         -- Recovery

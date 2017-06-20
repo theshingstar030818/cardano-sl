@@ -8,10 +8,10 @@ import           Data.Tagged              (Tagged)
 import           Test.Hspec               (Spec, describe)
 import           Universum
 
+import           Network.Broadcast.Relay  ()
+import qualified Network.Broadcast.Relay  as R
 import           Pos.Binary               ()
 -- import qualified Pos.Communication        as C
-import           Pos.Communication.Relay  ()
-import qualified Pos.Communication.Relay  as R
 import qualified Pos.Update               as U
 import           Test.Pos.Arbitrary.Infra ()
 
@@ -43,19 +43,15 @@ spec =
       describe "Network" $ do
         networkBinaryTest @(R.InvMsg VoteId')
         networkBinaryTest @(R.ReqMsg VoteId')
-        networkBinaryTest @(R.MempoolMsg U.UpdateVote)
         networkBinaryTest @(R.DataMsg U.UpdateVote)
         networkBinaryTest @(R.InvMsg UpId')
         networkBinaryTest @(R.ReqMsg UpId')
-        networkBinaryTest @(R.MempoolMsg (U.UpdateProposal, [U.UpdateVote]))
         networkBinaryTest @(R.DataMsg (U.UpdateProposal, [U.UpdateVote]))
     describe "Message length limit" $ do
         msgLenLimitedTest @(R.InvMsg VoteId')
         msgLenLimitedTest @(R.ReqMsg VoteId')
-        msgLenLimitedTest @(R.MempoolMsg U.UpdateVote)
         msgLenLimitedTest @(R.InvMsg UpId')
         msgLenLimitedTest @(R.ReqMsg UpId')
-        msgLenLimitedTest @(R.MempoolMsg (U.UpdateProposal, [U.UpdateVote]))
         -- TODO [CSL-859]
         -- msgLenLimitedTest @(C.MaxSize (R.DataMsg (U.UpdateProposal, [U.UpdateVote])))
         msgLenLimitedTest @(R.DataMsg U.UpdateVote)

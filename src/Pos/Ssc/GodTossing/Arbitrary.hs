@@ -16,10 +16,10 @@ import           Universum
 import qualified Data.HashMap.Strict              as HM
 import           Test.QuickCheck                  (Arbitrary (..), Gen, choose, elements,
                                                    listOf, oneof)
+import           Network.Broadcast.Relay.Types    (DataMsg (..))
 
 import           Pos.Binary.Class                 (asBinary)
 import           Pos.Binary.Ssc                   ()
-import           Pos.Communication.Types.Relay    (DataMsg (..))
 import           Pos.Constants                    (vssMaxTTL, vssMinTTL)
 import           Pos.Core                         (EpochIndex, SlotId (..), addressHash,
                                                    addressHash)

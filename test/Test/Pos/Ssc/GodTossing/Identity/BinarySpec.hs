@@ -9,9 +9,9 @@ import           Universum
 import           Crypto.Hash                            (Blake2b_224, Blake2b_256)
 import           Data.Tagged                            (Tagged)
 import           Test.Hspec                             (Spec, describe)
+import qualified Network.Broadcast.Relay.Types          as R
 
 import           Pos.Binary                             ()
-import qualified Pos.Communication.Relay                as R
 import           Pos.Core                               (StakeholderId)
 import           Pos.Crypto                             (AbstractHash, EncShare,
                                                          PublicKey, SecretProof, Share,
@@ -31,7 +31,6 @@ spec = describe "GodTossing" $ do
         binaryTest @GT.GtPayload
         binaryTest @(R.InvMsg (Tagged GT.MCCommitment StakeholderId))
         binaryTest @(R.ReqMsg (Tagged GT.MCCommitment StakeholderId))
-        binaryTest @(R.MempoolMsg GT.MCCommitment)
         binaryTest @(R.DataMsg GT.MCCommitment)
         binaryTest @(R.DataMsg GT.MCOpening)
         binaryTest @(R.DataMsg GT.MCShares)
@@ -55,7 +54,6 @@ spec = describe "GodTossing" $ do
 
         msgLenLimitedTest @(R.InvMsg (Tagged GT.MCCommitment StakeholderId))
         msgLenLimitedTest @(R.ReqMsg (Tagged GT.MCCommitment StakeholderId))
-        msgLenLimitedTest @(R.MempoolMsg GT.MCCommitment)
         -- msgLenLimitedTest' @(C.MaxSize (R.DataMsg GT.MCCommitment))
         --     (C.MaxSize . R.DataMsg <$> C.mcCommitmentMsgLenLimit)
         --     "MCCommitment"

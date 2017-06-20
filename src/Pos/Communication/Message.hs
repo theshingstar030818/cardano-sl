@@ -5,13 +5,13 @@ module Pos.Communication.Message
 import           Universum
 
 import           Node.Message.Class               (Message (..), MessageName (..))
+import           Network.Broadcast.Relay.Types    (DataMsg, InvMsg, InvOrData,
+                                                   ReqMsg)
 
 import           Pos.Binary.Class                 (UnsignedVarInt (..), encodeStrict)
 import           Pos.Block.Network.Types          (MsgBlock, MsgGetBlocks, MsgGetHeaders,
                                                    MsgHeaders)
 import           Pos.Communication.MessagePart    (MessagePart (..))
-import           Pos.Communication.Types.Relay    (DataMsg, InvMsg, InvOrData, MempoolMsg,
-                                                   ReqMsg)
 import           Pos.Delegation.Types             (ProxySKLightConfirmation)
 import           Pos.Ssc.GodTossing.Types.Message (MCCommitment, MCOpening, MCShares,
                                                    MCVssCertificate)
@@ -82,14 +82,6 @@ instance (MessagePart key) =>
         keyM :: Proxy (ReqMsg key) -> Proxy key
         keyM _ = Proxy
     formatMessage _ = "Request"
-
-instance (MessagePart tag) =>
-         Message (MempoolMsg tag) where
-    messageName p = varIntMName 10 <> pMessageName (tagM p)
-      where
-        tagM :: Proxy (MempoolMsg tag) -> Proxy tag
-        tagM _ = Proxy
-    formatMessage _ = "Mempool"
 
 instance (MessagePart contents) =>
          Message (DataMsg contents) where

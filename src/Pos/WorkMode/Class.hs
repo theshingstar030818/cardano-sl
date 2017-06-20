@@ -23,7 +23,6 @@ import           System.Wlog                 (WithLogger)
 
 import           Pos.Block.BListener         (MonadBListener)
 import           Pos.Communication.PeerState (WithPeerState)
-import           Pos.Communication.Relay     (MonadRelayMem)
 import           Pos.Context                 (BlkSemaphore, MonadBlockRetrievalQueue,
                                               MonadLastKnownHeader, MonadProgressHeader,
                                               MonadRecoveryHeader, MonadSscContext,
@@ -70,7 +69,6 @@ type WorkMode ssc m
       , MonadGState m
       , MonadRealDB m
       , MonadTxpMem TxpExtra_TMP m
-      , MonadRelayMem m
       , MonadDelegation m
       , MonadSscMem ssc m
       , MonadReportingMem m

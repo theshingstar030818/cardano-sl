@@ -45,7 +45,7 @@ packages:
   extra-dep: true
 - location:
     git: https://github.com/serokell/time-warp-nt.git
-    commit: 8bfba580e628791a03b0bec4d913890dde16811d # master
+    commit: d472f5e40ce64d9c2887396e2267ce75905e4916
   extra-dep: true
 # These two are needed for time-warp-nt
 - location:
@@ -111,4 +111,3 @@ ghc-options:
   cardano-sl-godtossing: -Werror
   cardano-sl-txp:        -Werror
   cardano-sl:            -Werror
-  cardano-sl-lwallet:    -Werror

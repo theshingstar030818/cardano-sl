@@ -34,7 +34,7 @@ import           Pos.Launcher          (BaseParams (..), LoggingParams (..),
                                         NetworkParams (..), NodeParams (..),
                                         NodeResources (nrContext), bracketNodeResources,
                                         hoistNodeResources, runNode', runRealMode,
-                                        stakesDistr)
+                                        stakesDistr, runToProd)
 import           Pos.Security          (SecurityParams (..), SecurityWorkersClass)
 import           Pos.Ssc.Class         (SscConstraint, SscParams)
 import           Pos.Ssc.GodTossing    (GtParams (..), SscGodTossing)
@@ -42,7 +42,7 @@ import           Pos.Ssc.NistBeacon    (SscNistBeacon)
 import           Pos.Ssc.SscAlgo       (SscAlgo (..))
 import           Pos.Txp               (TxAux (..))
 import           Pos.Update.Params     (UpdateParams (..))
-import           Pos.Util.JsonLog      ()
+import           Pos.Util.JsonLog      (JsonLogConfig (..))
 import           Pos.Util.UserSecret   (simpleUserSecret)
 import           Pos.Util.Util         (powerLift)
 import           Pos.Worker            (allWorkers)
@@ -108,7 +108,7 @@ runSmartGen nr opts@GenOptions{..} =
 
     txTimestamps <- liftIO createTxTimestamps
 
-    let ActionSpec nodeAction = runNode' @ssc workers'
+    let ActionSpec nodeAction = runNode' @ssc workers' []
 
     -- | Run all the usual node workers in order to get
     -- access to blockchain
@@ -223,7 +223,7 @@ runSmartGen nr opts@GenOptions{..} =
 
       return (newTPS, newStep)
   where
-    (workers', wOuts) = allWorkers (nrContext nr)
+    (workers', wOuts) = allWorkers (nrContext nr) nr
 
 -----------------------------------------------------------------------------
 -- Main
@@ -303,7 +303,7 @@ main = do
             -> IO ()
         action sscParams = runProduction $ bracketNodeResources params sscParams $
           \nr -> do
-            let nr' = hoistNodeResources powerLift nr
+            let nr' = hoistNodeResources powerLift (runToProd nr' JsonLogDisabled) nr
             runSmartGen @ssc nr' opts
 
     case CLI.sscAlgo goCommonArgs of

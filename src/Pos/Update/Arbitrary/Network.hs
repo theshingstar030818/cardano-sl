@@ -8,9 +8,9 @@ module Pos.Update.Arbitrary.Network
 
 import           Test.QuickCheck           (Arbitrary (..), listOf)
 import           Universum
+import           Network.Broadcast.Relay   (DataMsg (..))
 
 import           Pos.Binary.Update         ()
-import           Pos.Communication.Relay   (DataMsg (..))
 import           Pos.Crypto                (SignTag (SignUSVote), hash, sign, toPublic)
 import           Pos.Types.Arbitrary       ()
 import           Pos.Update.Arbitrary.Core ()

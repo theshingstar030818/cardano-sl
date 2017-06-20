@@ -7,10 +7,10 @@ module Test.Pos.Txp.Identity.BinarySpec
 import           Data.Tagged              (Tagged)
 import           Test.Hspec               (Spec, describe)
 import           Universum
+import           Network.Broadcast.Relay  as R
 
 import           Pos.Binary               ()
 import           Pos.Block.Arbitrary      (SmallTxPayload)
-import           Pos.Communication.Relay  as R
 import qualified Pos.Txp                  as T
 import           Test.Pos.Arbitrary.Infra ()
 
@@ -34,11 +34,9 @@ spec =
       describe "Network" $ do
         networkBinaryTest @(R.InvMsg (Tagged T.TxMsgContents T.TxId))
         networkBinaryTest @(R.ReqMsg (Tagged T.TxMsgContents T.TxId))
-        networkBinaryTest @(R.MempoolMsg T.TxMsgContents)
         networkBinaryTest @(R.DataMsg T.TxMsgContents)
     describe "Message length limit" $ do
       msgLenLimitedTest @(R.InvMsg (Tagged T.TxMsgContents T.TxId))
       msgLenLimitedTest @(R.ReqMsg (Tagged T.TxMsgContents T.TxId))
-      msgLenLimitedTest @(R.MempoolMsg T.TxMsgContents)
       -- No check for (DataMsg T.TxMsgContents) since overal message size
       -- is forcely limited

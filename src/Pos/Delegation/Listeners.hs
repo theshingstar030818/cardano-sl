@@ -5,6 +5,7 @@
 
 module Pos.Delegation.Listeners
        ( delegationRelays
+       , delegationRelayMkListeners
        ) where
 
 import           Universum
@@ -14,17 +15,19 @@ import qualified Ether
 import           Formatting                    (build, sformat, shown, (%))
 import           Serokell.Util.Text            (pairBuilder)
 import           System.Wlog                   (logDebug, logInfo)
+import           Network.Broadcast.Relay       (DataParams (..), PropagationMsg (..),
+                                                Relay (..), handleDataL)
 
 import           Pos.Binary                    ()
 import           Pos.Communication.Limits      ()
 import           Pos.Communication.Message     ()
-import           Pos.Communication.Relay       (DataParams (..), PropagationMsg (..),
-                                                Relay (..), addToRelayQueue)
-import           Pos.Communication.Relay.Types ()
+import           Pos.Communication.Protocol    (PackingType, MkListeners, constantListeners)
+import           Pos.Communication.Listener    (listenerConv)
 import           Pos.Context                   (BlkSemaphore (..))
-import           Pos.Core                      (getOurKeys)
+import           Pos.Core                      (getOurKeys, EpochIndex, ProxySKLight,
+                                                ProxySigLight)
 import           Pos.Crypto                    (SignTag (SignProxySK), proxySign,
-                                                pskDelegatePk)
+                                                pskDelegatePk, ProxySecretKey)
 import           Pos.Delegation.Logic          (ConfirmPskLightVerdict (..),
                                                 PskHeavyVerdict (..),
                                                 PskLightVerdict (..),
@@ -40,17 +43,31 @@ instance Buildable ProxySKLightConfirmation where
 -- | Listeners for requests related to delegation processing.
 delegationRelays
     :: forall ssc m. WorkMode ssc m
-    => [Relay m]
-delegationRelays =
-        [ pskLightRelay
-        , pskHeavyRelay
-        , confirmPskRelay
+    => (PropagationMsg PackingType -> m ())
+    -> [Relay PackingType m]
+delegationRelays propagate =
+        [ Data propagate (DataParams (pskLightRelay propagate))
+        , Data propagate (DataParams pskHeavyRelay)
+        , Data propagate (DataParams confirmPskRelay)
         ]
 
+delegationRelayMkListeners
+    :: forall ssc m . WorkMode ssc m
+    => (PropagationMsg PackingType -> m ())
+    -> MkListeners m
+delegationRelayMkListeners propagate = constantListeners [
+      listenerConv (handleDataL propagate (pskLightRelay propagate))
+    , listenerConv (handleDataL propagate pskHeavyRelay)
+    , listenerConv (handleDataL propagate confirmPskRelay)
+    ]
+
 pskLightRelay
-    :: WorkMode ssc m
-    => Relay m
-pskLightRelay = Data $ DataParams $ \pSk -> do
+    :: ( WorkMode ssc m )
+    => (PropagationMsg PackingType -> m ())
+    -> t
+    -> ProxySecretKey (EpochIndex, EpochIndex)
+    -> m Bool
+pskLightRelay propagate = \_ pSk -> do
     logDebug $ sformat ("Got request to handle lightweight psk: "%build) pSk
     verdict <- processProxySKLight pSk
     logResult pSk verdict
@@ -63,7 +80,10 @@ pskLightRelay = Data $ DataParams $ \pSk -> do
                logDebug $
                    sformat ("Generating delivery proof and propagating it to neighbors: "%build) pSk
                let proof = proxySign SignProxySK sk pSk pSk
-               addToRelayQueue (DataOnlyPM (pSk, proof))
+               -- FIXME this should not be necessary!!!
+               -- Some other piece of the system should initiate the proof
+               -- broadcast.
+               propagate (DataOnlyPM Nothing (pSk, proof))
                pure False
            else pure True
         _ -> pure False
@@ -80,8 +100,10 @@ pskLightRelay = Data $ DataParams $ \pSk -> do
 
 pskHeavyRelay
     :: WorkMode ssc m
-    => Relay m
-pskHeavyRelay = Data $ DataParams $ handlePsk
+    => t
+    -> ProxySKHeavy
+    -> m Bool
+pskHeavyRelay = \_ -> handlePsk
   where
     handlePsk :: forall ssc m. WorkMode ssc m => ProxySKHeavy -> m Bool
     handlePsk pSk = do
@@ -100,8 +122,10 @@ pskHeavyRelay = Data $ DataParams $ handlePsk
 
 confirmPskRelay
     :: WorkMode ssc m
-    => Relay m
-confirmPskRelay = Data $ DataParams $ \(pSk, proof) -> do
+    => t
+    -> (ProxySKLight, ProxySigLight ProxySKLight)
+    -> m Bool
+confirmPskRelay = \_ (pSk, proof) -> do
     verdict <- processConfirmProxySk pSk proof
     pure $ case verdict of
         CPValid -> True

@@ -34,6 +34,7 @@ import           Network.QDisc.Fair          (fairQDisc)
 import           Network.Transport.Abstract  (Transport, closeTransport, hoistTransport)
 import           Network.Transport.Concrete  (concrete)
 import qualified Network.Transport.TCP       as TCP
+import           Network.Broadcast.Relay     (PropagationMsg)
 import qualified STMContainers.Map           as SM
 import           System.IO                   (Handle, hClose)
 import           System.Wlog                 (CanLog, LoggerConfig (..), WithLogger,
@@ -43,6 +44,7 @@ import           System.Wlog                 (CanLog, LoggerConfig (..), WithLog
 
 import           Pos.Binary                  ()
 import           Pos.CLI                     (readLoggerConfig)
+import           Pos.Communication.Protocol  (PackingType, SendActions, hoistSendActions)
 import           Pos.Communication.PeerState (PeerStateCtx)
 import qualified Pos.Constants               as Const
 import           Pos.Context                 (BlkSemaphore (..), ConnectedPeers (..),
@@ -80,7 +82,6 @@ import qualified Pos.Update.DB               as GState
 import           Pos.Update.MemState         (newMemVar)
 import           Pos.Util.Concurrent.RWVar   as RWV
 import           Pos.Util.Util               (powerLift)
-import           Pos.Worker                  (allWorkersCount)
 import           Pos.WorkMode                (TxpExtra_TMP)
 
 -- Remove this once there's no #ifdef-ed Pos.Txp import
@@ -101,15 +102,21 @@ data NodeResources ssc m = NodeResources
     , nrTransport  :: !(Transport m)
     , nrJLogHandle :: !(Maybe Handle)
     -- ^ Handle for JSON logging (optional).
+    , nrPropagate  :: !(PropagationMsg PackingType -> m ())
+    , nrRelayWorker :: !(SendActions m -> m ())
     }
 
 hoistNodeResources ::
        forall ssc n m. Functor m
     => (forall a. n a -> m a)
+    -> (forall a. m a -> n a)
     -> NodeResources ssc n
     -> NodeResources ssc m
-hoistNodeResources nat nr =
-    nr {nrTransport = hoistTransport nat (nrTransport nr)}
+hoistNodeResources nat rnat nr =
+    nr { nrTransport = hoistTransport nat (nrTransport nr)
+       , nrPropagate = nat . nrPropagate nr
+       , nrRelayWorker = nat . nrRelayWorker nr . hoistSendActions rnat nat
+       }
 
 ----------------------------------------------------------------------------
 -- Allocation/release/bracket
@@ -117,7 +124,7 @@ hoistNodeResources nat nr =
 
 -- | Allocate all resources used by node. They must be released eventually.
 allocateNodeResources
-    :: forall ssc.
+    :: forall ssc .
       (SscConstraint ssc, SecurityWorkersClass ssc)
     => NodeParams
     -> SscParams ssc
@@ -153,6 +160,9 @@ allocateNodeResources np@NodeParams {..} sscnp = do
             case npJLFile of
                 Nothing -> pure Nothing
                 Just fp -> Just <$> openFile fp WriteMode
+        -- TODO Implement, using time-warp relay abstraction
+        nrPropagate <- pure (const (pure ()))
+        nrRelayWorker <- pure (const (pure ()))
         return NodeResources
             { nrContext = ctx
             , nrDBs = db
@@ -177,7 +187,7 @@ releaseNodeResources NodeResources {..} = do
 -- | Run computation which requires 'NodeResources' ensuring that
 -- resources will be released eventually.
 bracketNodeResources :: forall ssc a.
-      (SscConstraint ssc, SecurityWorkersClass ssc)
+       (SscConstraint ssc, SecurityWorkersClass ssc)
     => NodeParams
     -> SscParams ssc
     -> (NodeResources ssc Production -> Production a)
@@ -233,7 +243,6 @@ allocateNodeContext np@NodeParams {..} sscnp putSlotting = do
     putSlotting ncSlottingVar ncSlottingContext
     ncUserSecret <- newTVarIO $ npUserSecret
     ncBlockRetrievalQueue <- liftIO $ newTBQueueIO Const.blockRetrievalQueueSize
-    ncInvPropagationQueue <- liftIO $ newTBQueueIO Const.propagationQueueSize
     ncRecoveryHeader <- liftIO newEmptyTMVarIO
     ncProgressHeader <- liftIO newEmptyTMVarIO
     ncShutdownFlag <- newTVarIO False
@@ -260,10 +269,7 @@ allocateNodeContext np@NodeParams {..} sscnp putSlotting = do
 #endif
             , ..
             }
-    -- This queue won't be used.
-    fakeQueue <- liftIO (newTBQueueIO 100500)
-    let allWorkersNum = allWorkersCount @ssc (ctx fakeQueue)
-    ctx <$> liftIO (newTBQueueIO allWorkersNum)
+    ctx <$> liftIO (newTBQueueIO maxBound)
 
 releaseNodeContext :: forall ssc m . MonadIO m => NodeContext ssc -> m ()
 releaseNodeContext NodeContext {..} =

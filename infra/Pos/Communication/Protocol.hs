@@ -26,6 +26,10 @@ module Pos.Communication.Protocol
        , convertSendActions
        , checkingInSpecs
        , constantListeners
+
+       , invReqDataRelayOutSpecs
+       , dataRelayOutSpecs
+       , relayOutSpecs
        ) where
 
 import qualified Data.HashMap.Strict              as HM
@@ -40,6 +44,9 @@ import           Node.Message.Class               (Message (..), MessageName (..
 import           Serokell.Util.Text               (listJson)
 import           System.Wlog                      (WithLogger, logWarning)
 import           Universum
+import           Network.Broadcast.Relay          (DataMsg, ReqMsg, InvOrData,
+                                                   InvReqDataParams, DataParams,
+                                                   Relay (..))
 
 import           Pos.Communication.BiP            (BiP)
 import           Pos.Communication.PeerState      (WithPeerState (..))
@@ -61,8 +68,8 @@ mapListener'
           -> N.ConversationActions snd rcv m
           -> N.ConversationActions snd rcv m)
     -> (forall t. m t -> m t) -> Listener m -> Listener m
-mapListener' _ caMapper mapper (N.ListenerActionConversation f) =
-    N.ListenerActionConversation $ \d nId -> mapper . f d nId . caMapper nId
+mapListener' _ caMapper mapper (N.Listener f) =
+    N.Listener $ \d nId -> mapper . f d nId . caMapper nId
 
 mapActionSpec
     :: (N.SendActions BiP PeerData m -> N.SendActions BiP PeerData m)
@@ -76,11 +83,11 @@ hoistSendActions
     -> (forall a. m a -> n a)
     -> SendActions n
     -> SendActions m
-hoistSendActions nat rnat SendActions {..} = SendActions withConnectionTo'
+hoistSendActions nat rnat SendActions {..} = SendActions withConnectionTo_
   where
-    withConnectionTo'
+    withConnectionTo_
         :: forall t . NodeId -> (PeerData -> NonEmpty (Conversation m t)) -> m t
-    withConnectionTo' nodeId k =
+    withConnectionTo_ nodeId k =
         nat $ withConnectionTo nodeId $ \peerData ->
             flip map (k peerData) $ \(Conversation l) ->
                 Conversation $ \cactions ->
@@ -94,7 +101,7 @@ hoistMkListeners
     -> MkListeners n
 hoistMkListeners nat rnat (MkListeners act ins outs) = MkListeners act' ins outs
   where
-    act' v p = let ls = act v p in map (N.hoistListenerAction nat rnat) ls
+    act' v p = let ls = act v p in map (N.hoistListener nat rnat) ls
 
 convertSendActions
     :: ( WithLogger m
@@ -275,3 +282,35 @@ unpackLSpecs =
     lsToPair (ListenerSpec h spec) = (h, spec)
     convert :: Monoid out => ([(l, i)], out) -> ([l], [i], out)
     convert (xs, out) = (map fst xs, map snd xs, out)
+
+invReqDataRelayOutSpecs
+    :: ( Message (InvOrData key contents)
+       , Message (ReqMsg key)
+       )
+    => InvReqDataParams key contents m
+    -> OutSpecs
+invReqDataRelayOutSpecs irdp = toOutSpecs
+      [ convH invProxy reqProxy
+      ]
+  where
+    invProxy = (const Proxy :: InvReqDataParams key contents m
+                            -> Proxy (InvOrData key contents)) irdp
+    reqProxy = (const Proxy :: InvReqDataParams key contents m
+                            -> Proxy (ReqMsg key)) irdp
+
+dataRelayOutSpecs
+    :: ( Message (DataMsg contents)
+       , Message Void
+       )
+    => DataParams contents m
+    -> OutSpecs
+dataRelayOutSpecs dp = toOutSpecs
+      [ convH dataProxy (Proxy @Void)
+      ]
+  where
+    dataProxy = (const Proxy :: DataParams contents m
+                            -> Proxy (DataMsg contents)) dp
+
+relayOutSpecs :: Message Void => Relay packingType m -> OutSpecs
+relayOutSpecs (InvReqData _ it) = invReqDataRelayOutSpecs it
+relayOutSpecs (Data _ it) = dataRelayOutSpecs it

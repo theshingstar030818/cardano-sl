@@ -4,8 +4,8 @@ module Pos.Binary.GodTossing.Relay
 
 import           Universum
 
+import           Network.Broadcast.Relay.Types (DataMsg (..))
 import           Pos.Binary.Class              (Bi, get, label, put)
-import           Pos.Communication.Types.Relay (DataMsg (..))
 import qualified Pos.Ssc.GodTossing.Types      as T
 
 instance Bi (DataMsg T.MCCommitment) where

@@ -45,9 +45,7 @@ import           Pos.Security.Params           (SecurityParams)
 import           System.Wlog                   (LoggerConfig)
 
 import           Pos.Block.Core                (BlockHeader)
-import           Pos.Communication.Relay       (RelayPropagationQueue)
-import           Pos.Communication.Relay.Types (RelayContext (..))
-import           Pos.Communication.Types       (NodeId)
+import           Pos.Communication.Types.Protocol (NodeId)
 import           Pos.Core                      (HeaderHash, PrimaryKeyTag, SlotLeaders)
 import           Pos.Crypto                    (SecretKey)
 import           Pos.Discovery                 (DiscoveryContextSum)
@@ -132,9 +130,6 @@ modeContext [d|
         , ncProgressHeader      :: !(ProgressHeaderTag ::: ProgressHeader ssc)
         -- Header of the last block that was downloaded in retrieving
         -- queue. Is needed to show smooth prorgess on the frontend.
-        , ncInvPropagationQueue :: !(RelayPropagationQueue ::: RelayPropagationQueue)
-        -- Queue is used in Relay framework,
-        -- it stores inv messages for earlier received data.
         , ncLoggerConfig        :: !(LoggerConfig ::: LoggerConfig)
         -- Logger config, as taken/read from CLI.
         , ncNodeParams          :: !(NodeParams ::: NodeParams)
@@ -161,7 +156,6 @@ makeLensesFor
     , ("npSecurityParams", "npSecurityParamsL")
     , ("npSecretKey", "npSecretKeyL")
     , ("npReportServers", "npReportServersL")
-    , ("npPropagation", "npPropagationL")
     , ("npCustomUtxo", "npCustomUtxoL") ]
     ''NodeParams
 
@@ -190,14 +184,3 @@ instance HasLens ReportingContext (NodeContext ssc) ReportingContext where
         setter rc =
             set (lensOf @NodeParams . npReportServersL) (rc ^. rcReportServers) .
             set (lensOf @LoggerConfig) (rc ^. rcLoggingConfig)
-
-instance HasLens RelayContext (NodeContext ssc) RelayContext where
-    lensOf = lens getter (flip setter)
-      where
-        getter nc =
-            RelayContext
-                (nc ^. lensOf @NodeParams . npPropagationL)
-                (nc ^. lensOf @RelayPropagationQueue)
-        setter rc =
-            set (lensOf @NodeParams . npPropagationL) (_rlyIsPropagation rc) .
-            set (lensOf @RelayPropagationQueue) (_rlyPropagationQueue rc)

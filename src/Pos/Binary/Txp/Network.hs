@@ -6,8 +6,9 @@ module Pos.Binary.Txp.Network
 
 import           Universum
 
+import           Network.Broadcast.Relay.Types (DataMsg (..))
+
 import           Pos.Binary.Class              (Bi (..), label)
-import           Pos.Communication.Types.Relay (DataMsg (..))
 import           Pos.Txp.Network.Types         (TxMsgContents (..))
 
 ----------------------------------------------------------------------------
