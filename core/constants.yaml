@@ -107,7 +107,7 @@ prod_base: &prod_base
   ntpPollDelay: 60000000 # 1 min
 
   blockRetrievalQueueSize: 100
-  recoveryHeadersMessage: 100
+  recoveryHeadersMessage: 10000
 
 qanet: &qanet
   <<: *prod_base
