@@ -112,7 +112,7 @@ prod_base: &prod_base
 qanet: &qanet
   <<: *prod_base
 
-  k: 9
+  k: 5000
   genesisSlotDurationSec: 15
   networkDiameter: 10
   mdNoBlocksSlotThreshold: 10
