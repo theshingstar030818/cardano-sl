@@ -54,10 +54,9 @@ deploymentScript Options{..} = do
     when (not noBuild) $ do
         preparingGenerateScript
         generateDeployment
+        cluster Build
     when (not noCreate) $
         cluster Create
-    when (not noBuild) $
-        cluster Build
     prepareNodesForDeployment
     cluster Deploy
     cluster Stop
@@ -69,18 +68,17 @@ deploymentScript Options{..} = do
   where
     -- Basic settings --------------------------------------------------------------------
     nixConfig            = "config.nix"
-    prodConfigName       = "production.yaml"
-    devConfigName        = "config.yaml"
     generateScript       = "generate.sh"
     genesisKeysDirPrefix = "genesis-qanet-"
-    genesisBin           = "genesis.bin"
+    genesisCore          = "core/genesis-core.bin"
+    genesisGT            = "godtossing/genesis-godtossing.bin"
     genesisInfo          = "genesis.info"
     nodeFilesRoot        = "/var/lib/cardano-node/"
     nodeUser             = "cardano-node"
     runMainCardanoScript = "./CardanoCSL.hs"
     clusterName          = map toLower issueId
     clusterRoot          = deployerUserHome </> clusterName
-    newConfigYAML        = if itIsProductionCluster then prodConfigName else devConfigName
+    newConfigYAML        = "config.yaml"
     pathToNixConfig      = clusterRoot </> nixConfig
     pathToNewConfigYAML  = clusterRoot </> newConfigYAML
     pathToPkgs           = clusterRoot </> "pkgs"
@@ -157,11 +155,14 @@ deploymentScript Options{..} = do
         echo ""
         echo ">>> Commit and push updated genesis.* files..."
         currentDate <- getCurrentDate
-        cp (genesisKeysDirPrefix <> currentDate </> genesisBin)
-           (genesisKeysDirPrefix <> currentDate </> genesisInfo)
+        cp (genesisKeysDirPrefix <> currentDate </> genesisInfo)
            "."
+        cp (genesisKeysDirPrefix <> currentDate </> genesisGT)
+           genesisGT
+        cp (genesisKeysDirPrefix <> currentDate </> genesisCore)
+           genesisCore
         git "reset"
-        git "add" genesisBin genesisInfo
+        git "add" genesisCore genesisGT genesisInfo
         git "commit" "-m" ("[" <> issueId <> "] Update genesis.* files for new keys.")
         getCurrentBranch >>= git "push" "origin"
 
@@ -176,22 +177,15 @@ deploymentScript Options{..} = do
 
     preparingGenerateScript = do
         echo ""
-        echo ">>> Update 'cardano-sl' commit in" pathToGenerateScript "..."
+        echo ">>> Update 'cardano-sl' commit in" pathToPkgs "..."
         currentCommit <- getCurrentCommit
         echo "    Current commit is" currentCommit
-        runCommandOnDeployer $ replaceCardanoSLCommitWith currentCommit
-        echo ""
-        echo ">>> If you need to update commits for other packages, please do it now."
-        echo "After you finished (or if you don't need to change commits) press Enter. Type 'exit' to stop script."
-        continueIfNotExit
-      where
-        replaceCardanoSLCommitWith commit =
-            "sed -i -e 's/cardano-sl\\.git\\([ ]*\\)\\([a-f0-9][a-f0-9]*\\)/cardano-sl\\.git " <> commit <> "/g' " <> pathToGenerateScript
+        runCommandOnDeployer $ "echo -n " <> currentCommit <> " > " <> pathToPkgs <> "/cardano-sl.rev"
 
     generateDeployment = do
         echo ""
         echo ">>> Run generate.sh..."
-        runCommandOnDeployer $ "cd " <> pathToPkgs <> " && ./" <> generateScript
+        runCommandOnDeployer $ "cd " <> clusterRoot <> " && nix-shell --command \"cd " <> pathToPkgs <> " && ./" <> generateScript <> "\""
 
     prepareNodesForDeployment = do
         echo ""
