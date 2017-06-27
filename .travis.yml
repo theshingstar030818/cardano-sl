@@ -3,10 +3,7 @@ language: nix
 sudo: true
 matrix:
   include:
-    - env: HLINT=true
     - env: HLINT=false
-    - os: osx
-      osx_image: xcode8.3
 env:
   global:
     - NIX_PATH=nixpkgs=https://github.com/NixOS/nixpkgs/archive/0d4431cfe90b2242723ccb1ccc90714f2f68a609.tar.gz
