@@ -24,7 +24,7 @@ fi
 
 ls -lah /home/travis/.stack/setup-exe-cache/x86_64-linux-nix/Cabal-simple_mPHDZzAJ_1.24.2.0_ghc-8.0.2
 stack --nix --no-terminal install happy \
-  $EXTRA_STACK --fast --ghc-options="-j +RTS -A128m -n2m -RTS" --jobs=4
+  $EXTRA_STACK --fast --ghc-options="-j +RTS -A128m -n2m -RTS" --jobs=4 -v
 
 # We need to pass CONFIG=wallet to compile cardano-sl-core, but Stack doesn't
 # support passing arguments to Haddock yet (this will be fixed in the next
