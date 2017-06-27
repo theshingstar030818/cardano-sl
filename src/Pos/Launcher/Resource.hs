@@ -27,6 +27,7 @@ import           Control.Concurrent.STM      (newEmptyTMVarIO, newTBQueueIO)
 import           Data.Default                (def)
 import           Data.Tagged                 (untag)
 import qualified Data.Time                   as Time
+import qualified Data.Set                    as Set
 import           Formatting                  (sformat, shown, (%))
 import           Mockable                    (Catch, Mockable, Production (..), Throw,
                                               bracket, throw)
@@ -34,7 +35,8 @@ import           Network.QDisc.Fair          (fairQDisc)
 import           Network.Transport.Abstract  (Transport, closeTransport, hoistTransport)
 import           Network.Transport.Concrete  (concrete)
 import qualified Network.Transport.TCP       as TCP
-import           Network.Broadcast.Relay     (PropagationMsg)
+import           Network.Broadcast.Relay     (PropagationMsg, simpleRelayer)
+import qualified Node                        as N (SendActions, hoistSendActions)
 import qualified STMContainers.Map           as SM
 import           System.IO                   (Handle, hClose)
 import           System.Wlog                 (CanLog, LoggerConfig (..), WithLogger,
@@ -44,7 +46,7 @@ import           System.Wlog                 (CanLog, LoggerConfig (..), WithLog
 
 import           Pos.Binary                  ()
 import           Pos.CLI                     (readLoggerConfig)
-import           Pos.Communication.Protocol  (PackingType, SendActions, hoistSendActions)
+import           Pos.Communication.Protocol  (PackingType, PeerData)
 import           Pos.Communication.PeerState (PeerStateCtx)
 import qualified Pos.Constants               as Const
 import           Pos.Context                 (BlkSemaphore (..), ConnectedPeers (..),
@@ -57,7 +59,7 @@ import           Pos.DB.GState               (getTip)
 import           Pos.Delegation.Class        (DelegationVar)
 import           Pos.DHT.Real                (KademliaDHTInstance, KademliaParams (..),
                                               startDHTInstance, stopDHTInstance)
-import           Pos.Discovery               (DiscoveryContextSum (..))
+import           Pos.Discovery               (DiscoveryContextSum (..), getPeers)
 import           Pos.Genesis                 (genesisLeaders)
 import           Pos.Launcher.Param          (BaseParams (..), LoggingParams (..),
                                               NetworkParams (..), NodeParams (..))
@@ -103,7 +105,7 @@ data NodeResources ssc m = NodeResources
     , nrJLogHandle :: !(Maybe Handle)
     -- ^ Handle for JSON logging (optional).
     , nrPropagate  :: !(PropagationMsg PackingType -> m ())
-    , nrRelayWorker :: !(SendActions m -> m ())
+    , nrRelayWorker :: !(N.SendActions PackingType PeerData m -> m ())
     }
 
 hoistNodeResources ::
@@ -115,7 +117,7 @@ hoistNodeResources ::
 hoistNodeResources nat rnat nr =
     nr { nrTransport = hoistTransport nat (nrTransport nr)
        , nrPropagate = nat . nrPropagate nr
-       , nrRelayWorker = nat . nrRelayWorker nr . hoistSendActions rnat nat
+       , nrRelayWorker = nat . nrRelayWorker nr . N.hoistSendActions rnat nat
        }
 
 ----------------------------------------------------------------------------
@@ -160,9 +162,15 @@ allocateNodeResources np@NodeParams {..} sscnp = do
             case npJLFile of
                 Nothing -> pure Nothing
                 Just fp -> Just <$> openFile fp WriteMode
-        -- TODO Implement, using time-warp relay abstraction
-        nrPropagate <- pure (const (pure ()))
-        nrRelayWorker <- pure (const (pure ()))
+        let relayTargets Nothing = getPeers
+            relayTargets (Just origin) = do
+                targets <- getPeers
+                return $ targets Set.\\ Set.singleton origin
+        -- We need nrPropagate and nrRelayWorker to be in some monad that is
+        -- MonadDiscovery, in order to pick the relay targets.
+        -- But we also need it to be in Production, by the type signature
+        -- of allocateNodeResources.
+        (nrPropagate, nrRelayWorker) <- powerLift @Production $ simpleRelayer relayTargets
         return NodeResources
             { nrContext = ctx
             , nrDBs = db
