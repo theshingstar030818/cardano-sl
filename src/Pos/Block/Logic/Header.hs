@@ -234,9 +234,11 @@ getHeadersFromManyTo checkpoints startM = do
     unless (all ((/= tip) . headerHash) validCheckpoints) $
         throwError "Found checkpoint that is equal to our tip"
     let startFrom = fromMaybe tip startM
+        isCheckpoint bh =
+            any (\c -> bh ^. prevBlockL == c ^. headerHashG) validCheckpoints
         parentIsCheckpoint bh =
             any (\c -> bh ^. prevBlockL == c ^. headerHashG) validCheckpoints
-        whileCond bh = not (parentIsCheckpoint bh)
+        whileCond bh = not (isCheckpoint bh)
     headers <- noteM "Failed to load headers by depth" . fmap (_Wrapped nonEmpty) $
         DB.loadHeadersByDepthWhile whileCond recoveryHeadersMessage startFrom
     if parentIsCheckpoint $ headers ^. _Wrapped . _neLast
