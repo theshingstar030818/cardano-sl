@@ -235,7 +235,7 @@ getHeadersFromManyTo checkpoints startM = do
         throwError "Found checkpoint that is equal to our tip"
     let startFrom = fromMaybe tip startM
         isCheckpoint bh =
-            any (\c -> bh ^. prevBlockL == c ^. headerHashG) validCheckpoints
+            any (\c -> bh ^. headerHashG == c ^. headerHashG) validCheckpoints
         parentIsCheckpoint bh =
             any (\c -> bh ^. prevBlockL == c ^. headerHashG) validCheckpoints
         whileCond bh = not (isCheckpoint bh)
