@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+set -x
 
 export EXTRA_STACK="--no-haddock-deps"
 
