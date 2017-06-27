@@ -5,6 +5,7 @@ module Pos.Txp.Worker
        ( txpWorkers
        ) where
 
+import qualified Data.Set            as S
 import           Universum
 
 import           Pos.Communication   (OutSpecs, WorkerSpec)
@@ -22,10 +23,12 @@ import           System.Wlog         (logDebug, logInfo, logWarning)
 
 import           Pos.Communication   (Conversation (..), ConversationActions (..),
                                       DataMsg (..), InvMsg (..), InvOrData,
-                                      InvReqDataParams (..), MempoolMsg (..), NodeId,
+                                      InvReqDataParams (..), MempoolMsg (..),
                                       ReqMsg (..), SendActions, TxMsgContents, convH,
                                       expectData, handleDataDo, handleInvDo, recvLimited,
-                                      toOutSpecs, withConnectionTo, worker)
+                                      toOutSpecs, worker, sendMsg, MsgType (..),
+                                      enqueueConversation, waitForConversations,
+                                      NodeId)
 import           Pos.Discovery.Class (getPeers)
 import           Pos.Slotting        (getLastKnownSlotDuration)
 import           Pos.Txp.Core        (TxId)
@@ -99,31 +102,36 @@ queryTxsSpec =
 
 -- | Send a MempoolMsg to a node and receive incoming 'InvMsg's with
 -- transaction IDs.
+--
+-- TODO use the relay queue.
 getTxMempoolInvs
     :: WorkMode ssc ctx m
     => SendActions m -> NodeId -> m [TxId]
 getTxMempoolInvs sendActions node = do
     logInfo ("Querying tx mempool from node " <> show node)
-    withConnectionTo sendActions node $ \_ -> pure $ Conversation $
-      \(conv :: (ConversationActions
-                                (MempoolMsg TxMsgContents)
-                                (InvMsg TxIdT)
-                                m)
-      ) -> do
-          send conv MempoolMsg
-          let getInvs = do
-                inv' <- recvLimited conv
-                case inv' of
-                    Nothing -> return []
-                    Just (InvMsg{..}) -> do
-                        useful <-
-                          case txInvReqDataParams of
-                            InvReqDataParams {..} ->
-                                handleInvDo handleInv imKey
-                        case useful of
-                            Nothing           -> getInvs
-                            Just (Tagged key) -> (key:) <$> getInvs
-          getInvs
+    it <- enqueueConversation sendActions (S.singleton node) (sendMsg MsgTransaction) $
+        \_ _ -> pure $ Conversation $
+            \(conv :: (ConversationActions
+                                      (MempoolMsg TxMsgContents)
+                                      (InvMsg TxIdT)
+                                      m)
+            ) -> do
+                send conv MempoolMsg
+                let getInvs = do
+                      inv' <- recvLimited conv
+                      case inv' of
+                          Nothing -> return []
+                          Just (InvMsg{..}) -> do
+                              useful <-
+                                case txInvReqDataParams of
+                                  InvReqDataParams {..} ->
+                                      handleInvDo (handleInv node) imKey
+                              case useful of
+                                  Nothing           -> getInvs
+                                  Just (Tagged key) -> (key:) <$> getInvs
+                getInvs
+    it' <- waitForConversations it
+    return $ foldr (++) [] it'
 
 -- | Request several transactions.
 requestTxs
@@ -136,25 +144,27 @@ requestTxs sendActions node txIds = do
     logDebug $ sformat
         ("First 5 (or less) transactions: "%listJson)
         (take 5 txIds)
-    withConnectionTo sendActions node $ \_ -> pure $ Conversation $
-     \(conv :: (ConversationActions
-                                (ReqMsg TxIdT)
-                                (InvOrData TxIdT TxMsgContents)
-                                m)
-      ) -> do
-          let getTx id = do
-                  logDebug $ sformat ("Requesting transaction "%build) id
-                  send conv $ ReqMsg id
-                  dt' <- recvLimited conv
-                  case dt' of
-                      Nothing -> error "didn't get an answer to Req"
-                      Just x  -> flip expectData x $
-                        \(DataMsg dmContents) ->
-                          case txInvReqDataParams of
-                            InvReqDataParams {..} ->
-                                handleDataDo contentsToKey handleData dmContents
-          for_ txIds $ \(Tagged -> id) ->
-              getTx id `catch` handler id
+    it <- enqueueConversation sendActions (S.singleton node) (sendMsg MsgTransaction) $
+        \_ _ -> pure $ Conversation $
+          \(conv :: (ConversationActions
+                                     (ReqMsg TxIdT)
+                                     (InvOrData TxIdT TxMsgContents)
+                                     m)
+           ) -> do
+               let getTx id = do
+                       logDebug $ sformat ("Requesting transaction "%build) id
+                       send conv $ ReqMsg id
+                       dt' <- recvLimited conv
+                       case dt' of
+                           Nothing -> error "didn't get an answer to Req"
+                           Just x  -> flip expectData x $
+                             \(DataMsg dmContents) ->
+                               case txInvReqDataParams of
+                                 InvReqDataParams {..} ->
+                                     handleDataDo node MsgTransaction sendActions contentsToKey (handleData node) dmContents
+               for_ txIds $ \(Tagged -> id) ->
+                   getTx id `catch` handler id
+    _ <- waitForConversations it
     logInfo $ sformat
         ("Finished requesting txs from node "%shown)
         node

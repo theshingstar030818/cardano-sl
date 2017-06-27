@@ -47,7 +47,7 @@ handleGetHeaders
     :: forall ssc ctx m.
        (WorkMode ssc ctx m)
     => (ListenerSpec m, OutSpecs)
-handleGetHeaders = listenerConv $ \__ourVerInfo nodeId conv -> do
+handleGetHeaders = listenerConv $ \__ourVerInfo nodeId _ conv -> do
     logDebug $ "handleGetHeaders: request from " <> show nodeId
     handleHeadersCommunication conv --(convToSProxy conv)
 
@@ -55,7 +55,7 @@ handleGetBlocks
     :: forall ssc ctx m.
        (WorkMode ssc ctx m)
     => (ListenerSpec m, OutSpecs)
-handleGetBlocks = listenerConv $ \__ourVerInfo nodeId conv -> do
+handleGetBlocks = listenerConv $ \__ourVerInfo nodeId _ conv -> do
     mbMsg <- recvLimited conv
     whenJust mbMsg $ \mgb@MsgGetBlocks{..} -> do
         logDebug $ sformat ("Got request on handleGetBlocks: "%build%" from "%build)
@@ -86,7 +86,7 @@ handleBlockHeaders
     :: forall ssc ctx m.
        (SscWorkersClass ssc, WorkMode ssc ctx m)
     => (ListenerSpec m, OutSpecs)
-handleBlockHeaders = listenerConv @MsgGetHeaders $ \__ourVerInfo nodeId conv -> do
+handleBlockHeaders = listenerConv @MsgGetHeaders $ \__ourVerInfo nodeId _ conv -> do
     -- The type of the messages we send is set to 'MsgGetHeaders' for
     -- protocol compatibility reasons only. We could use 'Void' here because
     -- we don't really send any messages.

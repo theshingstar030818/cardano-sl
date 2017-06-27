@@ -22,8 +22,8 @@ import           Pos.Communication.Protocol  (ActionSpec (..), Listener, Message
 import           Pos.Util.TimeLimit          (CanLogInParallel, logWarningWaitLinear)
 
 sendActionsWithWaitLog :: ( CanLogInParallel m )
-            => N.SendActions BiP PeerData m
-            -> N.SendActions BiP PeerData m
+            => N.SendActions BiP PeerData peer msgType m
+            -> N.SendActions BiP PeerData peer msgType m
 sendActionsWithWaitLog sendActions = sendActions
     { N.withConnectionTo =
         \nodeId mkConv ->
@@ -108,7 +108,7 @@ wrapSendActions
      , MonadIO m
      , WithLogger m
      )
-  => N.SendActions BiP PeerData m
-  -> N.SendActions BiP PeerData m
+  => N.SendActions BiP PeerData peer msgType m
+  -> N.SendActions BiP PeerData peer msgType m
 wrapSendActions =
     sendActionsWithWaitLog

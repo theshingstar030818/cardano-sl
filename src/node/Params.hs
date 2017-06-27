@@ -15,6 +15,7 @@ import           System.Wlog           (LoggerName, WithLogger)
 
 import qualified Pos.CLI               as CLI
 import           Pos.Constants         (isDevelopment)
+import           Pos.Communication     (NodeId)
 import           Pos.Core.Types        (Timestamp (..))
 import           Pos.Crypto            (VssKeyPair)
 import           Pos.DHT.Real          (KademliaParams (..))
@@ -23,10 +24,10 @@ import           Pos.Genesis           (devAddrDistr, devStakesDistr,
                                         genesisProdBootStakeholders, genesisUtxo)
 import           Pos.Launcher          (BaseParams (..), LoggingParams (..),
                                         NetworkParams (..), NodeParams (..))
+import           Pos.Network.Types     (NetworkConfig, emptyNetworkConfig)
 import           Pos.Security          (SecurityParams (..))
 import           Pos.Ssc.GodTossing    (GtParams (..))
 import           Pos.Update.Params     (UpdateParams (..))
-import           Pos.Util.TimeWarp     (NetworkAddress, addressToNodeId, readAddrFile)
 import           Pos.Util.UserSecret   (peekUserSecret)
 
 import           NodeOptions           (Args (..))
@@ -41,24 +42,26 @@ loggingParams tag Args{..} =
     , lpRunnerTag     = tag
     }
 
-getPeersFromArgs :: Args -> IO [NetworkAddress]
-getPeersFromArgs Args {..} = do
-    filePeers <- maybe (return []) readAddrFile dhtPeersFile
-    pure $ dhtPeersList ++ filePeers
+getPeersFromArgs :: Args -> [NodeId]
+getPeersFromArgs Args {..} = fst <$> peers
+    -- FIXME change the format of this file? Eliminate it altogether and
+    -- consolidate this configuration information in one file, with other
+    -- networking/relay policy stuff?
+    --filePeers <- maybe (return []) readAddrFile peersFile
+    --pure $ peers ++ filePeers
 
 -- | Load up the KademliaParams. It's in IO because we may have to read a
 --   file to find some peers.
-getKademliaParams :: Args -> IO KademliaParams
-getKademliaParams args@Args{..} = do
-    allPeers <- getPeersFromArgs args
-    pure $ KademliaParams
-                 { kpNetworkAddress  = dhtNetworkAddress
-                 , kpPeers           = allPeers
-                 , kpKey             = dhtKey
-                 , kpExplicitInitial = dhtExplicitInitial
-                 , kpDump            = kademliaDumpPath
-                 , kpExternalAddress = externalAddress
-                 }
+getKademliaParams :: Args -> KademliaParams
+getKademliaParams Args{..} =
+    KademliaParams
+        { kpNetworkAddress  = dhtNetworkAddress
+        , kpPeers           = dhtPeers
+        , kpKey             = dhtKey
+        , kpExplicitInitial = dhtExplicitInitial
+        , kpDump            = kademliaDumpPath
+        , kpExternalAddress = externalAddress
+        }
 
 getBaseParams :: LoggerName -> Args -> BaseParams
 getBaseParams loggingTag args@Args {..} =
@@ -88,14 +91,17 @@ getNodeParams args@Args {..} systemStart = do
         userSecretWithGenesisKey args =<<
         updateUserSecretVSS args =<<
         peekUserSecret (getKeyfilePath args)
-    npNetwork <- liftIO $ getNetworkParams args
-    let devStakeDistr =
+    let npNetwork = getNetworkParams args
+        -- TODO parse the network configuration from some yaml file.
+        npNetworkConfig :: NetworkConfig
+        npNetworkConfig = emptyNetworkConfig
+        devStakeDistr =
             devStakesDistr
                 (CLI.flatDistr commonArgs)
                 (CLI.bitcoinDistr commonArgs)
                 (CLI.richPoorDistr commonArgs)
                 (CLI.expDistr commonArgs)
-    let npCustomUtxo =
+        npCustomUtxo =
             if isDevelopment
             then genesisUtxo Nothing (devAddrDistr devStakeDistr)
             else genesisUtxo (Just genesisProdBootStakeholders)
@@ -126,23 +132,19 @@ getNodeParams args@Args {..} systemStart = do
         , ..
         }
 
-getNetworkParams :: Args -> IO NetworkParams
+getNetworkParams :: Args -> NetworkParams
 getNetworkParams args
-    | staticPeers args = do
-        allPeers <- S.fromList . map addressToNodeId <$> getPeersFromArgs args
-        return
-            NetworkParams
-            {npDiscovery = Left allPeers, npTcpAddr = TCP.Unaddressable}
-    | otherwise = do
+    | staticPeers args =
+        let allPeers = S.fromList (getPeersFromArgs args)
+        in  NetworkParams {npDiscovery = Left allPeers, npTcpAddr = TCP.Unaddressable}
+    | otherwise =
         let (bindHost, bindPort) = bindAddress args
-        let (externalHost, externalPort) = externalAddress args
-        let tcpAddr =
+            (externalHost, externalPort) = externalAddress args
+            tcpAddr =
                 TCP.Addressable $
                 TCP.TCPAddrInfo
                     (BS8.unpack bindHost)
                     (show $ bindPort)
                     (const (BS8.unpack externalHost, show $ externalPort))
-        kademliaParams <- getKademliaParams args
-        return
-            NetworkParams
-            {npDiscovery = Right kademliaParams, npTcpAddr = tcpAddr}
+            kademliaParams = getKademliaParams args
+        in  NetworkParams {npDiscovery = Right kademliaParams, npTcpAddr = tcpAddr}

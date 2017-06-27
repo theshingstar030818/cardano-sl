@@ -56,7 +56,8 @@ import           Pos.Block.Types            (Blund)
 import           Pos.Communication.Limits   (recvLimited)
 import           Pos.Communication.Protocol (Conversation (..), ConversationActions (..),
                                              NodeId, OutSpecs, SendActions (..), convH,
-                                             toOutSpecs)
+                                             toOutSpecs, waitForConversations,
+                                             MsgType (..), sendMsg)
 import           Pos.Context                (BlockRetrievalQueueTag, LastKnownHeaderTag,
                                              recoveryCommGuard, recoveryInProgress)
 import           Pos.Core                   (HasHeaderHash (..), HeaderHash, gbHeader,
@@ -114,7 +115,7 @@ triggerRecovery :: forall ssc ctx m.
     => SendActions m -> m ()
 triggerRecovery sendActions = unlessM recoveryInProgress $ do
     logDebug "Recovery triggered, requesting tips from neighbors"
-    converseToNeighbors sendActions (pure . Conversation . requestTip) `catch`
+    void (converseToNeighbors sendActions (sendMsg MsgBlockHeader) (pure . Conversation . requestTip) >>= waitForConversations) `catch`
         \(e :: SomeException) -> do
            logDebug ("Error happened in triggerRecovery: " <> show e)
            throwM e

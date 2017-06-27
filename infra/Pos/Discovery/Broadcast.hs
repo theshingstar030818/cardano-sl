@@ -5,22 +5,23 @@ module Pos.Discovery.Broadcast
        ) where
 
 
-import           Formatting                 (int, sformat, shown, (%))
-import           Mockable                   (MonadMockable, forConcurrently, handleAll)
+import qualified Data.Set                   as S
+import           Formatting                 (int, sformat, (%))
+import           Mockable                   (MonadMockable)
 import           System.Wlog                (WithLogger, logDebug, logWarning)
 import           Universum                  hiding (catchAll)
 
-import           Pos.Communication.Protocol (Conversation, NodeId, SendActions (..))
+import           Pos.Communication.Protocol (Conversation, SendActions (..), NodeId, Msg)
 import           Pos.Discovery.Class        (MonadDiscovery, getPeers)
 import           Pos.Infra.Constants        (neighborsSendThreshold)
 
-check :: (WithLogger m) => Set NodeId -> m [NodeId]
-check nodes = do
-    when (length nodes < neighborsSendThreshold) $
+check :: (WithLogger m) => Set NodeId -> m (Set NodeId)
+check peers = do
+    when (S.size peers < neighborsSendThreshold) $
         logWarning $ sformat
             ("Send to only " % int % " nodes, threshold is " % int)
-            (length nodes) (neighborsSendThreshold :: Int)
-    return (toList nodes)
+            (S.size peers) (neighborsSendThreshold :: Int)
+    return peers
 
 converseToNeighbors
     :: ( MonadMockable m
@@ -28,16 +29,13 @@ converseToNeighbors
        , WithLogger m
        )
     => SendActions m
+    -> Msg
     -> (NodeId -> NonEmpty (Conversation m ()))
-    -> m ()
-converseToNeighbors sendActions convHandler = do
-    nodes <- check =<< getPeers
-    logDebug $ "converseToNeighbors: sending to nodes: " <> show nodes
-    void $ forConcurrently nodes $ \node -> do
-        handleAll (logErr node) $ withConnectionTo sendActions node (\_ -> convHandler node)
-        logDebug $ "converseToNeighbors: DONE conversing to node " <> show node
+    -> m (Map NodeId (m ()))
+converseToNeighbors sendActions msgType convHandler = do
+    peers <- check =<< getPeers
+    logDebug $ "converseToNeighbors: sending to nodes: " <> show peers
+    t <- enqueueConversation sendActions peers msgType $ \peer _ ->
+        convHandler peer
     logDebug "converseToNeighbors: sending to nodes done"
-  where
-    logErr node e =
-        logWarning $
-        sformat ("Error in conversation to "%shown%": "%shown) node e
+    return t

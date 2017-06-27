@@ -14,7 +14,7 @@ import           Pos.Binary.Communication   ()
 import           Pos.Binary.Core            ()
 import           Pos.Binary.Relay           ()
 import           Pos.Communication.Message  ()
-import           Pos.Communication.Protocol (NodeId, SendActions)
+import           Pos.Communication.Protocol (NodeId, SendActions, MsgType (..))
 import           Pos.Communication.Relay    (invReqDataFlowTK)
 import           Pos.Crypto                 (hash, hashHexF)
 import           Pos.DB.Class               (MonadGState)
@@ -32,6 +32,7 @@ sendTx sendActions addr txAux =
     invReqDataFlowTK
         "tx"
         sendActions
+        MsgTransaction
         addr
         (hash $ taTx txAux)
         (TxMsgContents txAux)
@@ -41,7 +42,7 @@ sendVote
     :: (MinWorkMode m, MonadGState m)
     => SendActions m -> NodeId -> UpdateVote -> m ()
 sendVote sendActions addr vote =
-    invReqDataFlowTK "UpdateVote" sendActions addr (mkVoteId vote) vote
+    invReqDataFlowTK "UpdateVote" sendActions MsgMPC addr (mkVoteId vote) vote
 
 -- Send UpdateProposal to given address.
 sendUpdateProposal
@@ -57,6 +58,7 @@ sendUpdateProposal sendActions addr upid proposal votes = do
     invReqDataFlowTK
         "UpdateProposal"
         sendActions
+        MsgMPC
         addr
         upid
         (proposal, votes)

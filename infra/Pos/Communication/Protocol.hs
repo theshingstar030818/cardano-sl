@@ -57,27 +57,28 @@ mapListener
 mapListener = mapListener' identity $ const identity
 
 mapListener'
-    :: (N.SendActions BiP PeerData m -> N.SendActions BiP PeerData m)
+    :: (N.SendActions BiP PeerData NodeId Msg m -> N.SendActions BiP PeerData NodeId Msg m)
     -> (forall snd rcv. Message rcv => N.NodeId
           -> N.ConversationActions snd rcv m
           -> N.ConversationActions snd rcv m)
     -> (forall t. m t -> m t) -> Listener m -> Listener m
-mapListener' _ caMapper mapper (N.ListenerActionConversation f) =
-    N.ListenerActionConversation $ \d nId -> mapper . f d nId . caMapper nId
+mapListener' saMapper caMapper mapper (N.Listener f) =
+    N.Listener $ \d nId sendActions -> mapper . f d nId (saMapper sendActions) . caMapper nId
 
 mapActionSpec
-    :: (N.SendActions BiP PeerData m -> N.SendActions BiP PeerData m)
+    :: (N.SendActions BiP PeerData NodeId Msg m -> N.SendActions BiP PeerData NodeId Msg m)
     -> (forall t. m t -> m t) -> ActionSpec m a -> ActionSpec m a
 mapActionSpec saMapper aMapper (ActionSpec f) =
     ActionSpec $ \vI sA -> aMapper $ f vI (saMapper sA)
 
 hoistSendActions
     :: forall n m .
-       (forall a. n a -> m a)
+       ( Functor m )
+    => (forall a. n a -> m a)
     -> (forall a. m a -> n a)
     -> SendActions n
     -> SendActions m
-hoistSendActions nat rnat SendActions {..} = SendActions withConnectionTo'
+hoistSendActions nat rnat SendActions {..} = SendActions withConnectionTo' enqueueConversation''
   where
     withConnectionTo'
         :: forall t . NodeId -> (PeerData -> NonEmpty (Conversation m t)) -> m t
@@ -87,15 +88,29 @@ hoistSendActions nat rnat SendActions {..} = SendActions withConnectionTo'
                 Conversation $ \cactions ->
                     rnat (l (N.hoistConversationActions nat cactions))
 
+    enqueueConversation''
+        :: forall t .
+           Set NodeId
+        -> Msg
+        -> (NodeId -> PeerData -> NonEmpty (Conversation m t))
+        -> m (Map NodeId (m t))
+    enqueueConversation'' peers msg k = (fmap . fmap) nat $
+        nat $ enqueueConversation peers msg $ \peer pVI ->
+            let convs = k peer pVI
+                convert (Conversation l) = Conversation $ \cactions ->
+                    rnat (l (N.hoistConversationActions nat cactions))
+            in  map convert convs
+
 hoistMkListeners
-    :: Monad n
+    :: ( Monad n, Functor m )
     => (forall a. m a -> n a)
     -> (forall a. n a -> m a)
     -> MkListeners m
     -> MkListeners n
 hoistMkListeners nat rnat (MkListeners act ins outs) = MkListeners act' ins outs
   where
-    act' v p = let ls = act v p in map (N.hoistListenerAction nat rnat) ls
+    act' v p = let ls = act v p in map (N.hoistListener nat rnat) ls
+
 
 convertSendActions
     :: ( WithLogger m
@@ -103,7 +118,7 @@ convertSendActions
        , WithPeerState m
        , Mockable SharedAtomic m
        )
-    => VerInfo -> N.SendActions BiP PeerData m -> SendActions m
+    => VerInfo -> N.SendActions BiP PeerData NodeId Msg m -> SendActions m
 convertSendActions ourVerInfo sA = SendActions
     { withConnectionTo = \nodeId mkConv -> N.withConnectionTo sA nodeId $ \pVI ->
           let alts = mkConv pVI
@@ -119,6 +134,21 @@ convertSendActions ourVerInfo sA = SendActions
                            ("Failed to choose appropriate conversation: "%listJson)
                            errs
                        throw $ NE.head errs
+    , enqueueConversation = \peers msg mkConv -> N.enqueueConversation sA peers msg $
+          \nodeId pVI ->
+              let alts = mkConv nodeId pVI
+                  alts' = map (checkingOutSpecs' nodeId (vIInHandlers pVI)) alts
+              in  case sequence alts' of
+                      Left (Conversation l) -> N.Conversation $ \conv -> do
+                          mapM_ logOSNR alts'
+                          l conv
+                      Right errs -> case NE.head alts of
+                          Conversation l_ -> N.Conversation $ \conv -> do
+                              let _ = l_ conv
+                              logWarning $ sformat
+                                  ("Failed to choose appropriate conversation: "%listJson)
+                                  errs
+                              throw $ NE.head errs
     }
   where
     ourOutSpecs = vIOutHandlers ourVerInfo

@@ -76,6 +76,8 @@ library
                         Pos.Communication.Relay.Util
                         Pos.Communication.Util
 
+                        Pos.Network.Types
+
                         -- Recovery
                         Pos.Recovery.Info
 

@@ -31,8 +31,8 @@ import           Pos.Block.Types             (Undo)
 import           Pos.Communication.PeerState (HasPeerState (..), PeerStateCtx,
                                               WithPeerState (..), clearPeerStateDefault,
                                               getAllStatesDefault, getPeerStateDefault)
-import           Pos.Context                 (HasNodeContext (..), HasPrimaryKey (..),
-                                              HasSscContext (..), NodeContext)
+import           Pos.Context                 (NodeContext, HasSscContext (..),
+                                              HasPrimaryKey (..), HasNodeContext (..))
 import           Pos.Core                    (IsHeader)
 import           Pos.DB                      (MonadGState (..), NodeDBs)
 import           Pos.DB.Block                (dbGetBlockDefault, dbGetBlockSscDefault,

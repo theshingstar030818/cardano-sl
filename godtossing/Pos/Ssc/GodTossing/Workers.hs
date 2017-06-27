@@ -31,7 +31,7 @@ import           Pos.Binary.Infra                      ()
 import           Pos.Communication.MessagePart         (MessagePart)
 import           Pos.Communication.Protocol            (Message, OutSpecs, SendActions,
                                                         Worker', WorkerSpec,
-                                                        onNewSlotWorker)
+                                                        onNewSlotWorker, MsgType (..))
 import           Pos.Communication.Relay               (DataMsg, ReqMsg,
                                                         invReqDataFlowNeighborsTK)
 import           Pos.Communication.Specs               (createOutSpecs)
@@ -142,7 +142,7 @@ checkNSendOurCert sendActions = do
             ourVssCertificate <- getOurVssCertificate slot
             let contents = MCVssCertificate ourVssCertificate
             sscProcessOurMessage (sscProcessCertificate ourVssCertificate)
-            invReqDataFlowNeighborsTK "ssc" sendActions ourId contents
+            invReqDataFlowNeighborsTK "ssc" sendActions MsgMPC ourId contents
             logDebug "Announced our VssCertificate."
 
     slMaybe <- getCurrentSlot
@@ -291,7 +291,7 @@ sendOurData sendActions msgTag ourId dt epoch slMultiplier = do
     -- type of message.
     waitUntilSend msgTag epoch slMultiplier
     logInfo $ sformat ("Announcing our "%build) msgTag
-    invReqDataFlowNeighborsTK "ssc" sendActions ourId dt
+    invReqDataFlowNeighborsTK "ssc" sendActions MsgMPC ourId dt
     logDebug $ sformat ("Sent our " %build%" to neighbors") msgTag
 
 -- Generate new commitment and opening and use them for the current

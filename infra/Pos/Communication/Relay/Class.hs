@@ -1,24 +1,22 @@
-{-# LANGUAGE GADTs        #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs           #-}
+{-# LANGUAGE TypeFamilies    #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Pos.Communication.Relay.Class
        ( Relay (..)
        , InvReqDataParams (..)
        , DataParams (..)
        , MempoolParams (..)
-       , MonadRelayMem
-       , askRelayMem
        ) where
 
-import           Ether.Internal                 (HasLens (..))
+import           Universum
 import           Node.Message.Class             (Message)
 import           Pos.Binary.Class               (Bi)
-import           Universum
 
 import           Pos.Communication.Limits.Types (MessageLimited)
-import           Pos.Communication.Relay.Types  (RelayContext)
 import           Pos.Communication.Types.Relay  (DataMsg, InvMsg, InvOrData, MempoolMsg,
                                                  ReqMsg (..))
+import           Pos.Communication.Types.Protocol (NodeId, SendActions, MsgType)
 
 -- | Data for general Inv/Req/Dat framework
 
@@ -57,23 +55,22 @@ data MempoolParams m where
       ) => Proxy tag -> m [key] -> MempoolParams m
 
 data InvReqDataParams key contents m = InvReqDataParams
-    { contentsToKey :: contents -> m key
+    { invReqMsgType :: !MsgType
+    , contentsToKey :: contents -> m key
       -- ^ Get key for given contents.
-    , handleInv     :: key -> m Bool
+    , handleInv     :: NodeId -> key -> m Bool
       -- ^ Handle inv msg and return whether it's useful or not
-    , handleReq     :: key -> m (Maybe contents)
+    , handleReq     :: NodeId -> key -> m (Maybe contents)
       -- ^ Handle req msg and return (Just data) in case requested data can be provided
-    , handleData    :: contents -> m Bool
+    , handleData    :: NodeId -> contents -> m Bool
       -- ^ Handle data msg and return True if message is to be propagated
     }
 
 data DataParams contents m = DataParams
-    { handleDataOnly :: contents -> m Bool
+    { dataMsgType    :: !MsgType
+    , handleDataOnly :: SendActions m -> NodeId -> contents -> m Bool
       -- ^ Handle data msg and return True if message is to be propagated
+      -- FIXME the SendActions shouldn't be there. It is for the benefit of
+      -- a delegation listener which, in its handleDataOnly callback, must
+      -- enqueue some conversations.
     }
-
-
-type MonadRelayMem ctx m = (MonadReader ctx m, HasLens RelayContext ctx RelayContext)
-
-askRelayMem :: MonadRelayMem ctx m => m RelayContext
-askRelayMem = view (lensOf @RelayContext)

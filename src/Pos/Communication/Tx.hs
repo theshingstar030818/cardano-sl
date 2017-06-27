@@ -112,6 +112,8 @@ submitTxRaw sa na txAux@TxAux {..} = do
     let txId = hash taTx
     logInfo $ sformat ("Submitting transaction: "%txaF) txAux
     logInfo $ sformat ("Transaction id: "%build) txId
+    -- TODO enqueueConversation on the set of peers and wait for them to
+    -- finish.
     void $ mapConcurrently (flip (sendTx sa) txAux) na
 
 sendTxOuts :: OutSpecs

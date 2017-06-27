@@ -27,6 +27,8 @@ submitVote
     -> m ()
 submitVote sendActions na voteUpd = do
     void $ forConcurrently na $
+        -- TODO enqueueConversation on the set of peers and wait for it to
+        -- finish.
         \addr -> sendVote sendActions addr voteUpd
 
 -- | Send UpdateProposal with one positive vote to given addresses
@@ -45,5 +47,7 @@ submitUpdateProposal sendActions ss na prop = do
             , uvDecision   = True
             , uvSignature  = safeSign SignUSVote ss (upid, True)
             }
+    -- TODO enqueueConversation on the set of peers and wait for it to
+    -- finish.
     void $ forConcurrently na $
         \addr -> sendUpdateProposal sendActions addr upid prop [initUpdVote]

@@ -26,6 +26,8 @@ import           Node                            (Node, NodeAction (..), NodeEnd
                                                   defaultNodeEnvironment,
                                                   hoistSendActions, noReceiveDelay, node,
                                                   simpleNodeEndPoint)
+import           Node.Conversation               (Converse)
+import           Node.OutboundQueue              (OutboundQueue, freeForAll)
 import           Node.Util.Monitor               (setupMonitor, stopMonitor)
 import qualified System.Metrics                  as Metrics
 import           System.Random                   (newStdGen)
@@ -37,7 +39,8 @@ import           Pos.Binary                      ()
 import           Pos.Communication               (ActionSpec (..), BiP (..), InSpecs (..),
                                                   MkListeners (..), OutSpecs (..),
                                                   VerInfo (..), allListeners,
-                                                  hoistMkListeners)
+                                                  hoistMkListeners, NodeId,
+                                                  PackingType, PeerData, Msg)
 import qualified Pos.Constants                   as Const
 import           Pos.Context                     (NodeContext (..))
 import           Pos.DHT.Real                    (foreverRejoinNetwork)
@@ -137,6 +140,12 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
         whenJust mEkg stopMonitor
 
     -- TODO: it would be good to put this behavior into 'Discovery' class.
+    -- TODO: there's really no reason why we have to continually rejoin the
+    -- network. In fact it runs contrary to the intended use of Kademlia.
+    -- Joining a network which you've already joined *should* give an ID
+    -- clash with high probability (the initial peer probably remembers you),
+    -- but we've actually modified the Kademlia library to ignore this
+    -- just because we abuse it here in cardano-sl.
     specialDiscoveryWrapper = case ncDiscoveryContext of
         DCStatic _          -> identity
         DCKademlia kademlia -> foreverRejoinNetwork kademlia
@@ -154,7 +163,8 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
             nrContext
 
 runServer
-    :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
+    :: forall m t b .
+       (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
     => (m (Statistics m) -> NodeEndPoint m)
     -> (m (Statistics m) -> ReceiveDelay m)
     -> MkListeners m
@@ -166,7 +176,17 @@ runServer
 runServer mkTransport mkReceiveDelay mkL (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo: "%build) ourVerInfo
-    node mkTransport mkReceiveDelay mkConnectDelay stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
+    -- TODO use Edsko's outbound queue
+    --   Network.Broadcast.OutboundQueue.asOutboundQueue
+    -- we can create the OutboundQ here, no need to put it into some reader
+    -- antecedent of 'm'.
+    -- We just need the network configuration in scope (out node type, routes,
+    -- policies, etc.). Otherwise it's straightforward.
+    let mkOutboundQueue
+            :: Converse PackingType PeerData m
+            -> m (OutboundQueue PackingType PeerData NodeId Msg m)
+        mkOutboundQueue converse = pure (freeForAll identity converse)
+    node mkTransport mkReceiveDelay mkConnectDelay mkOutboundQueue stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
         NodeAction mkListeners' $ \sendActions ->
             bracket (withNode __node) afterNode (const (action ourVerInfo sendActions))
   where

@@ -24,6 +24,7 @@ import           Universum                    hiding (show)
 import           Paths_cardano_sl             (version)
 import qualified Pos.CLI                      as CLI
 import           Pos.Constants                (isDevelopment)
+import           Pos.Communication            (NodeType (..), NodeId)
 import           Pos.DHT.Model                (DHTKey)
 import           Pos.DHT.Real.CLI             (dhtExplicitInitialOption, dhtKeyOption,
                                                dhtNetworkAddressOption,
@@ -32,7 +33,7 @@ import           Pos.Security                 (AttackTarget, AttackType)
 import           Pos.Statistics               (EkgParams, StatsdParams,
                                                ekgParamsOption, statsdParamsOption)
 import           Pos.Util.BackupPhrase        (BackupPhrase, backupPhraseWordsNum)
-import           Pos.Util.TimeWarp            (NetworkAddress, addrParser)
+import           Pos.Util.TimeWarp            (addressToNodeId, NetworkAddress, addrParser)
 
 data Args = Args
     { dbPath                    :: !FilePath
@@ -51,11 +52,14 @@ data Args = Args
     , dhtNetworkAddress         :: !NetworkAddress
     , dhtKey                    :: !(Maybe DHTKey)
       -- ^ The Kademlia key to use. Randomly generated if Nothing is given.
-    , dhtPeersList              :: ![NetworkAddress]
-      -- ^ A list of initial Kademlia peers to useA.
-    , dhtPeersFile              :: !(Maybe FilePath)
-      -- ^ A file containing a list of Kademlia peers to use.
     , dhtExplicitInitial        :: !Bool
+    , dhtPeers                  :: ![NetworkAddress]
+      -- ^ Addresses of known Kademlia peers.
+    , peers                     :: ![(NodeId, NodeType)]
+      -- ^ Known peers (addresses with classification).
+    , peersFile                 :: !(Maybe FilePath)
+      -- ^ A file containing a list of peers to use to supplement the ones
+      -- given directly on command line.
     , jlPath                    :: !(Maybe FilePath)
     , maliciousEmulationAttacks :: ![AttackType]
     , maliciousEmulationTargets :: ![AttackTarget]
@@ -124,9 +128,10 @@ argsParser = do
         help "Launch DHT supporter instead of full node"
     dhtNetworkAddress <- dhtNetworkAddressOption (Just ("0.0.0.0", 0))
     dhtKey <- optional dhtKeyOption
-    dhtPeersList <- many addrNodeOption
-    dhtPeersFile <- optional dhtPeersFileOption
+    dhtPeers <- many dhtPeerOption
     dhtExplicitInitial <- dhtExplicitInitialOption
+    peers <- (++) <$> corePeersList <*> relayPeersList
+    peersFile <- optional dhtPeersFileOption
     jlPath <-
         CLI.optionalJSONPath
     maliciousEmulationAttacks <-
@@ -196,9 +201,19 @@ argsParser = do
     statsdParams <- optional statsdParamsOption
 
     pure Args{..}
+  where
+    corePeersList = many (peerOption "peer-core" (flip (,) NodeCore . addressToNodeId))
+    relayPeersList = many (peerOption "peer-relay" (flip (,) NodeRelay . addressToNodeId))
 
-addrNodeOption :: Parser NetworkAddress
-addrNodeOption =
+peerOption :: String -> (NetworkAddress -> (NodeId, NodeType)) -> Parser (NodeId, NodeType)
+peerOption longName mk =
+    option (fromParsec (mk <$> addrParser)) $
+        long longName <>
+        metavar "HOST:PORT" <>
+        help "Address of a peer"
+
+dhtPeerOption :: Parser NetworkAddress
+dhtPeerOption =
     option (fromParsec addrParser) $
         long "kademlia-peer" <>
         metavar "HOST:PORT" <>

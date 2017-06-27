@@ -22,17 +22,26 @@ module Pos.Communication.Types.Protocol
        , notInSpecs
        , NSendActions
        , N.ConversationActions (..)
-       , N.NodeId
+       , NodeId
        , OutSpecs (..)
        , PackingType
        , PeerId (..)
        , PeerData
        , SendActions (..)
+       , enqueueConversation'
+       , N.waitForConversations
        , toOutSpecs
        , VerInfo (..)
        , Worker
        , Worker'
        , WorkerSpec
+       , NodeType (..)
+       , MsgType (..)
+       , Origin (..)
+       , Msg (..)
+       , forwardMsg
+       , sendMsg
+       , msgOrigin
        ) where
 
 import           Data.Aeson                 (ToJSON (..), FromJSON (..), Value)
@@ -43,6 +52,9 @@ import qualified Data.Text.Buildable        as B
 import qualified Data.Text.Encoding         as Text (encodeUtf8, decodeUtf8)
 import qualified Data.Text.Internal.Builder as B
 import           Formatting                 (bprint, build, hex, sformat, (%))
+-- TODO should not have to import outboundqueue stuff here. MsgType and
+-- NodeType should be a cardano-sl notion.
+import           Pos.Network.Types          (NodeType (..), MsgType (..), Origin (..), NodeId (..))
 import           Network.Transport          (EndPointAddress (..))
 import qualified Node                       as N
 import           Node.Message.Class         (Message (..), MessageName (..))
@@ -57,30 +69,60 @@ import           Pos.Core.Types             (BlockVersion)
 type PackingType = BiP
 type PeerData = VerInfo
 
-type Listener = N.Listener PackingType PeerData
+type Listener = N.Listener PackingType PeerData NodeId Msg
 type Worker m = Action m ()
 type Action m a = NSendActions m -> m a
 type Action' m a = SendActions m -> m a
 type Worker' m = Action' m ()
-type NSendActions = N.SendActions PackingType PeerData
+type NSendActions = N.SendActions PackingType PeerData NodeId Msg
 newtype ActionSpec m a = ActionSpec (VerInfo -> Action m a)
 type WorkerSpec m = ActionSpec m ()
 
+newtype Msg = Msg (MsgType, Origin NodeId)
+
+forwardMsg :: NodeId -> MsgType -> Msg
+forwardMsg nid ty = Msg (ty, OriginForward nid)
+
+sendMsg :: MsgType -> Msg
+sendMsg ty = Msg (ty, OriginSender)
+
+msgOrigin :: Msg -> Origin NodeId
+msgOrigin (Msg (_, it)) = it
+
 data SendActions m = SendActions {
-    -- | Establish a bi-direction conversation session with a node.
-    --
-    -- A NonEmpty of Conversations is given as a sort of multi-version
-    -- handling thing. The one to use is determined by trying to match
-    -- in- and out-specs using VerInfo of our node and the peer.
-    --
-    -- FIXME change this. Surely there is a more straightforward way.
-    -- Why use in- and out-specs at all? Why not just a version number?
-    withConnectionTo
-        :: forall t .
-        N.NodeId
-        -> (PeerData -> NonEmpty (Conversation m t))
-        -> m t
+      -- | Establish a bi-direction conversation session with a node.
+      --
+      -- A NonEmpty of Conversations is given as a sort of multi-version
+      -- handling thing. The one to use is determined by trying to match
+      -- in- and out-specs using VerInfo of our node and the peer.
+      --
+      -- FIXME change this. Surely there is a more straightforward way.
+      -- Why use in- and out-specs at all? Why not just a version number?
+      withConnectionTo
+          :: forall t .
+             NodeId
+          -> (PeerData -> NonEmpty (Conversation m t))
+          -> m t
+    , enqueueConversation
+          :: forall t .
+             Set NodeId
+          -> Msg
+          -> (NodeId -> PeerData -> NonEmpty (Conversation m t))
+          -> m (Map NodeId (m t))
     }
+
+-- | Enqueue a conversation with a bunch of peers and then wait for all of
+-- the results.
+enqueueConversation'
+    :: forall m t .
+       ( Monad m )
+    => SendActions m
+    -> Set NodeId
+    -> Msg
+    -> (NodeId -> PeerData -> NonEmpty (Conversation m t))
+    -> m (Map NodeId t)
+enqueueConversation' sendActions peers msg k =
+    enqueueConversation sendActions peers msg k >>= N.waitForConversations
 
 -- FIXME do not demand Message on rcv. That's only done for the benefit of
 -- this in- and out-spec motif. See TW-152.
@@ -96,8 +138,8 @@ newtype PeerId = PeerId ByteString
 instance ToJSON PeerId where
     toJSON (PeerId bs) = toJSONBS bs
 
-instance ToJSON N.NodeId where
-    toJSON (N.NodeId (EndPointAddress bs)) = toJSON (Text.decodeUtf8 (B64.encode bs))
+instance ToJSON NodeId where
+    toJSON (NodeId (EndPointAddress bs)) = toJSON (Text.decodeUtf8 (B64.encode bs))
 
 toJSONBS :: ByteString -> Value
 toJSONBS = toJSON . Text.decodeUtf8 . B64.encode
@@ -105,8 +147,8 @@ toJSONBS = toJSON . Text.decodeUtf8 . B64.encode
 instance FromJSON PeerId where
     parseJSON = fromJSONBS PeerId
 
-instance FromJSON N.NodeId where
-    parseJSON = fromJSONBS (N.NodeId . EndPointAddress)
+instance FromJSON NodeId where
+    parseJSON = fromJSONBS (NodeId . EndPointAddress)
 
 fromJSONBS :: (ByteString -> a) -> Value -> Parser a
 fromJSONBS f v = do
@@ -118,8 +160,8 @@ fromJSONBS f v = do
 instance Buildable PeerId where
     build (PeerId bs) = buildBS bs
 
-instance Buildable N.NodeId where
-    build (N.NodeId (EndPointAddress bs)) = buildBS bs
+instance Buildable NodeId where
+    build (NodeId (EndPointAddress bs)) = buildBS bs
 
 buildBS :: ByteString -> B.Builder
 buildBS = bprint base16F
@@ -183,7 +225,7 @@ data ListenerSpec m = ListenerSpec
 
 -- | The MessageName that the listener responds to.
 listenerMessageName :: forall m . Listener m -> MessageName
-listenerMessageName (N.ListenerActionConversation (_ :: PeerData -> N.NodeId -> N.ConversationActions snd rcv m -> m ())) =
+listenerMessageName (N.Listener (_ :: PeerData -> NodeId -> N.SendActions PackingType PeerData NodeId Msg m -> N.ConversationActions snd rcv m -> m ())) =
     messageName (Proxy @rcv)
 
 newtype InSpecs = InSpecs HandlerSpecs
