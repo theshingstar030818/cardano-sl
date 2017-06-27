@@ -34,6 +34,7 @@ after_failure:
 
 script:
 # DEVOPS-107: wait 20min for output due to haddock generation
+- find $HOME/.stack
 - if [[ "$HLINT" == "true" ]]; then
     nix-shell -p haskellPackages.hlint moreutils --run "scripts/haskell/lint.sh --nix | ts";
   else
