@@ -241,7 +241,12 @@ getHeadersFromManyTo checkpoints startM = do
         whileCond bh = not (isCheckpoint bh)
     headers <- noteM "Failed to load headers by depth" . fmap (_Wrapped nonEmpty) $
         DB.loadHeadersByDepthWhile whileCond recoveryHeadersMessage startFrom
-    if parentIsCheckpoint $ headers ^. _Wrapped . _neLast
+    let newestH = headers ^. _Wrapped . _neHead
+        oldestH = headers ^. _Wrapped . _neLast
+    logDebug $
+        sformat ("getHeadersFromManyTo: retrieved headers, oldest is "
+                % build % ", newest is " % build) oldestH newestH
+    if parentIsCheckpoint oldestH
     then pure headers
     else do
         logDebug $ "getHeadersFromManyTo: giving headers in recovery mode"
