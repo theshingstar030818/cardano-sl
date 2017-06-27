@@ -35,12 +35,8 @@ after_failure:
 script:
 # DEVOPS-107: wait 20min for output due to haddock generation
 - find $HOME/.stack
-- if [[ "$HLINT" == "true" ]]; then
-    true
-  else
-    travis_wait 20 sleep 4600&
-    nix-shell -p moreutils expect --run "unbuffer ./scripts/ci/travis.sh | ts";
-  fi
+- travis_wait 20 sleep 4600&
+  nix-shell -p moreutils expect --run "unbuffer ./scripts/ci/travis.sh | ts";
 
 deploy:
   provider: s3
