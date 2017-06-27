@@ -9,3 +9,6 @@ node:
         severity: Debug
     dht:
         severity: Info
+    worker:
+        block:
+            severity: Info
