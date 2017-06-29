@@ -51,6 +51,8 @@ library
                         Pos.Block.Logic
                         Pos.Block.Network
                         Pos.Block.Pure
+                        Pos.Block.RetrievalQueue
+                        Pos.Block.Types
                         Pos.CLI
                         Pos.Context
                         Pos.CompileConfig
@@ -180,7 +182,6 @@ library
                         Pos.Block.Network.Listeners
                         Pos.Block.Network.Logic
                         Pos.Block.Network.Retrieval
-                        Pos.Block.Types
                         Pos.Block.Worker
 
                         -- Compile config

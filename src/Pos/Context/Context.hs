@@ -34,7 +34,6 @@ module Pos.Context.Context
 
 import           Universum
 
-import           Control.Concurrent.STM        (TBQueue)
 import qualified Control.Concurrent.STM        as STM
 import           Control.Lens                  (coerced, lens, makeLensesFor)
 import           Data.Time.Clock               (UTCTime)
@@ -44,6 +43,9 @@ import           Pos.Security.Params           (SecurityParams)
 import           System.Wlog                   (LoggerConfig)
 
 import           Pos.Block.Core                (BlockHeader)
+import           Pos.Block.RetrievalQueue      (BlockRetrievalQueue,
+                                                BlockRetrievalQueueTag,
+                                                MonadBlockRetrievalQueue)
 import           Pos.Communication.Relay       (RelayPropagationQueue)
 import           Pos.Communication.Relay.Types (RelayContext (..))
 import           Pos.Communication.Types       (NodeId)
@@ -63,7 +65,6 @@ import           Pos.Txp.Settings              (TxpGlobalSettings)
 import           Pos.Txp.Toil.Types            (Utxo)
 import           Pos.Update.Context            (UpdateContext)
 import           Pos.Update.Params             (UpdateParams)
-import           Pos.Util.Chrono               (NE, NewestFirst)
 import           Pos.Util.UserSecret           (UserSecret)
 
 ----------------------------------------------------------------------------
@@ -78,11 +79,6 @@ type MonadLastKnownHeader ssc = Ether.MonadReader LastKnownHeaderTag (LastKnownH
 data ProgressHeaderTag
 type ProgressHeader ssc = STM.TMVar (BlockHeader ssc)
 type MonadProgressHeader ssc = Ether.MonadReader ProgressHeaderTag (ProgressHeader ssc)
-
-data BlockRetrievalQueueTag
-type BlockRetrievalQueue ssc = TBQueue (NodeId, NewestFirst NE (BlockHeader ssc))
-type MonadBlockRetrievalQueue ssc =
-    Ether.MonadReader BlockRetrievalQueueTag (BlockRetrievalQueue ssc)
 
 data RecoveryHeaderTag
 type RecoveryHeader ssc = STM.TMVar (NodeId, BlockHeader ssc)
