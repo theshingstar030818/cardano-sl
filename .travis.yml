@@ -10,6 +10,7 @@ env:
 cache:
   directories:
   - "$HOME/.stack"
+  - "/nix"
   #- "$HOME/build/input-output-hk/cardano-sl/.stack-work"
 
 before_install:
