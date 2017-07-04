@@ -99,6 +99,12 @@ extra-deps:
 - th-abstraction-0.2.2.0          # needed for lens
 - rocksdb-haskell-1.0.0
 - generic-arbitrary-0.1.0
+# The below are theoretically not needed but we need to list them as
+# a workaround for stack to unregister them again and again
+# because they do not declare their `setup-depends` correctly
+# (see https://github.com/commercialhaskell/stack/issues/3151).
+- entropy-0.3.7 # https://github.com/TomMD/entropy/issues/32, waiting for release to be on Hackage/Stackage
+- happy-1.19.5 # https://github.com/simonmar/happy/pull/88
 
 # This is for CI to pass --fast to all dependencies
 apply-ghc-options: everything
