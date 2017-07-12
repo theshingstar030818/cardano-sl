@@ -51,7 +51,7 @@ delegationRelays =
 pskLightRelay
     :: WorkMode ssc ctx m
     => Relay m
-pskLightRelay = Data $ DataParams MsgMPC $ \sendActions _ pSk -> do
+pskLightRelay = Data $ DataParams MsgTransaction $ \sendActions _ pSk -> do
     logDebug $ sformat ("Got request to handle lightweight psk: "%build) pSk
     verdict <- processProxySKLight pSk
     logResult pSk verdict
@@ -69,9 +69,7 @@ pskLightRelay = Data $ DataParams MsgMPC $ \sendActions _ pSk -> do
                -- This is here to bypass the unused import/variable warnings
                -- until I get around to fixing this. We'll have to get a hold
                -- of some SendActions here. Highly dodgy.
-               void $ propagateData sendActions sendMsg (DataOnlyPM MsgMPC (pSk, proof))
-               --converseToNeighbors sendActions MsgMPC 
-               --getPeers >>= addToRelayQueue (DataOnlyPM MsgMPC (pSk, proof)) Nothing
+               void $ propagateData sendActions sendMsg (DataOnlyPM MsgTransaction (pSk, proof))
                pure False
            else pure True
         _ -> pure False
@@ -89,7 +87,7 @@ pskLightRelay = Data $ DataParams MsgMPC $ \sendActions _ pSk -> do
 pskHeavyRelay
     :: WorkMode ssc ctx m
     => Relay m
-pskHeavyRelay = Data $ DataParams MsgMPC $ \_ _ -> handlePsk
+pskHeavyRelay = Data $ DataParams MsgTransaction $ \_ _ -> handlePsk
   where
     handlePsk :: forall ssc ctx m. WorkMode ssc ctx m => ProxySKHeavy -> m Bool
     handlePsk pSk = do
@@ -109,7 +107,7 @@ pskHeavyRelay = Data $ DataParams MsgMPC $ \_ _ -> handlePsk
 confirmPskRelay
     :: WorkMode ssc ctx m
     => Relay m
-confirmPskRelay = Data $ DataParams MsgMPC $ \_ _ (pSk, proof) -> do
+confirmPskRelay = Data $ DataParams MsgTransaction $ \_ _ (pSk, proof) -> do
     verdict <- processConfirmProxySk pSk proof
     pure $ case verdict of
         CPValid -> True
