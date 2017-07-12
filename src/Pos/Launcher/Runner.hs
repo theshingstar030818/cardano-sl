@@ -27,7 +27,8 @@ import           Node                            (Node, NodeAction (..), NodeEnd
                                                   hoistSendActions, noReceiveDelay, node,
                                                   simpleNodeEndPoint)
 import           Node.Conversation               (Converse)
-import           Node.OutboundQueue              (OutboundQueue, freeForAll)
+import           Node.OutboundQueue              (OutboundQueue)
+import           Network.Broadcast.OutboundQueue as OQ
 import           Node.Util.Monitor               (setupMonitor, stopMonitor)
 import qualified System.Metrics                  as Metrics
 import           System.Random                   (newStdGen)
@@ -39,8 +40,9 @@ import           Pos.Binary                      ()
 import           Pos.Communication               (ActionSpec (..), BiP (..), InSpecs (..),
                                                   MkListeners (..), OutSpecs (..),
                                                   VerInfo (..), allListeners,
-                                                  hoistMkListeners, NodeId,
-                                                  PackingType, PeerData, Msg)
+                                                  hoistMkListeners, NodeId, NodeType (..),
+                                                  MsgType (..), Msg (..), PackingType,
+                                                  PeerData)
 import qualified Pos.Constants                   as Const
 import           Pos.Context                     (NodeContext (..))
 import           Pos.DHT.Real                    (foreverRejoinNetwork)
@@ -176,16 +178,24 @@ runServer
 runServer mkTransport mkReceiveDelay mkL (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo: "%build) ourVerInfo
-    -- TODO use Edsko's outbound queue
-    --   Network.Broadcast.OutboundQueue.asOutboundQueue
-    -- we can create the OutboundQ here, no need to put it into some reader
-    -- antecedent of 'm'.
-    -- We just need the network configuration in scope (out node type, routes,
-    -- policies, etc.). Otherwise it's straightforward.
-    let mkOutboundQueue
+    let ourNodeType = NodeCore
+        enqueuePolicy = OQ.defaultEnqueuePolicy ourNodeType
+        dequeuePolicy = OQ.defaultDequeuePolicy ourNodeType
+        failurePolicy = OQ.defaultFailurePolicy ourNodeType
+    -- TODO use oq to implement subscription listeners.
+    oq <- OQ.new ("self" :: String) enqueuePolicy dequeuePolicy failurePolicy
+    -- TODO getNodeType should look up the NodeId in a map to determine its
+    -- type, and use NodeEdge if it's not in there.
+    let getNodeType :: NodeId -> NodeType
+        getNodeType = const NodeCore
+        getMsgType :: Msg -> MsgType
+        getMsgType (Msg (ty, _)) = ty
+        getMsgOrigin :: Msg -> Origin NodeId
+        getMsgOrigin (Msg (_, origin)) = origin
+        mkOutboundQueue
             :: Converse PackingType PeerData m
             -> m (OutboundQueue PackingType PeerData NodeId Msg m)
-        mkOutboundQueue converse = pure (freeForAll identity converse)
+        mkOutboundQueue converse = OQ.asOutboundQueue oq identity getNodeType getMsgType getMsgOrigin converse
     node mkTransport mkReceiveDelay mkConnectDelay mkOutboundQueue stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
         NodeAction mkListeners' $ \sendActions ->
             bracket (withNode __node) afterNode (const (action ourVerInfo sendActions))
