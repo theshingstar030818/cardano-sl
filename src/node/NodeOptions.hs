@@ -19,16 +19,17 @@ import           Options.Applicative.Simple   (Parser, auto, execParser, footerD
 import           Prelude                      (show)
 import           Serokell.Util.OptParse       (fromParsec)
 import           Text.PrettyPrint.ANSI.Leijen (Doc)
+import qualified Text.Parsec.Char             as P
 import           Universum                    hiding (show)
 
 import           Paths_cardano_sl             (version)
 import qualified Pos.CLI                      as CLI
 import           Pos.Constants                (isDevelopment)
-import           Pos.Communication            (NodeType (..), NodeId)
 import           Pos.DHT.Model                (DHTKey)
 import           Pos.DHT.Real.CLI             (dhtExplicitInitialOption, dhtKeyOption,
                                                dhtNetworkAddressOption,
                                                dhtPeersFileOption)
+import           Pos.Network.Types            (NodeType (..), NodeId)
 import           Pos.Security                 (AttackTarget, AttackType)
 import           Pos.Statistics               (EkgParams, StatsdParams,
                                                ekgParamsOption, statsdParamsOption)
@@ -55,6 +56,7 @@ data Args = Args
     , dhtExplicitInitial        :: !Bool
     , dhtPeers                  :: ![NetworkAddress]
       -- ^ Addresses of known Kademlia peers.
+    , nodeType                  :: !NodeType
     , peers                     :: ![(NodeId, NodeType)]
       -- ^ Known peers (addresses with classification).
     , peersFile                 :: !(Maybe FilePath)
@@ -130,6 +132,7 @@ argsParser = do
     dhtKey <- optional dhtKeyOption
     dhtPeers <- many dhtPeerOption
     dhtExplicitInitial <- dhtExplicitInitialOption
+    nodeType <- nodeTypeOption
     peers <- (++) <$> corePeersList <*> relayPeersList
     peersFile <- optional dhtPeersFileOption
     jlPath <-
@@ -204,6 +207,19 @@ argsParser = do
   where
     corePeersList = many (peerOption "peer-core" (flip (,) NodeCore . addressToNodeId))
     relayPeersList = many (peerOption "peer-relay" (flip (,) NodeRelay . addressToNodeId))
+
+nodeTypeOption :: Parser NodeType
+nodeTypeOption =
+    option (fromParsec nodeTypeParser) $
+        long "node-type" <>
+        value NodeCore <>
+        metavar "core|relay|edge" <>
+        help "The type of this node (core, relay, edge), default core"
+  where
+    nodeTypeParser =
+            (NodeCore  <$ P.string "core")
+        <|> (NodeRelay <$ P.string "relay")
+        <|> (NodeEdge  <$ P.string "edge")
 
 peerOption :: String -> (NetworkAddress -> (NodeId, NodeType)) -> Parser (NodeId, NodeType)
 peerOption longName mk =

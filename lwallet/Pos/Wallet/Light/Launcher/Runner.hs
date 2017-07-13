@@ -20,6 +20,8 @@ import           Pos.Communication               (ActionSpec (..), MkListeners, 
 import           Pos.Discovery                   (findPeers)
 import           Pos.Launcher                    (BaseParams (..), LoggingParams (..),
                                                   runServer)
+import           Pos.Network.Types               (NetworkConfig, emptyNetworkConfig,
+                                                  NodeType (NodeEdge))
 import           Pos.Reporting.MemState          (emptyReportingContext)
 import           Pos.Util.JsonLog                (JsonLogConfig (..))
 import           Pos.Util.Util                   ()
@@ -38,13 +40,14 @@ allWorkers = mempty
 
 -- | WalletMode runner
 runLightWalletMode
-    :: Transport LightWalletMode
+    :: NetworkConfig
+    -> Transport LightWalletMode
     -> Set NodeId
     -> WalletParams
     -> (ActionSpec LightWalletMode a, OutSpecs)
     -> Production a
-runLightWalletMode transport peers wp@WalletParams {..} =
-    runRawStaticPeersWallet transport peers wp mempty
+runLightWalletMode networkConfig transport peers wp@WalletParams {..} =
+    runRawStaticPeersWallet networkConfig transport peers wp mempty
 
 runWalletStaticPeers
     :: Transport LightWalletMode
@@ -53,7 +56,7 @@ runWalletStaticPeers
     -> ([WorkerSpec LightWalletMode], OutSpecs)
     -> Production ()
 runWalletStaticPeers transport peers wp =
-    runLightWalletMode transport peers wp . runWallet
+    runLightWalletMode (emptyNetworkConfig NodeEdge) transport peers wp . runWallet
 
 runWallet
     :: MonadWallet ssc ctx m
@@ -72,13 +75,14 @@ runWallet (plugins', pouts) = (,outs) . ActionSpec $ \vI sendActions -> do
     outs = wouts <> pouts
 
 runRawStaticPeersWallet
-    :: Transport LightWalletMode
+    :: NetworkConfig
+    -> Transport LightWalletMode
     -> Set NodeId
     -> WalletParams
     -> MkListeners LightWalletMode
     -> (ActionSpec LightWalletMode a, OutSpecs)
     -> Production a
-runRawStaticPeersWallet transport peers WalletParams {..}
+runRawStaticPeersWallet networkConfig transport peers WalletParams {..}
                         listeners (ActionSpec action, outs) =
     bracket openDB closeDB $ \db -> do
         stateM <- liftIO SM.newIO
@@ -93,7 +97,7 @@ runRawStaticPeersWallet transport peers WalletParams {..}
                 JsonLogDisabled
                 lpRunnerTag
             ) .
-            runServer_ transport listeners outs . ActionSpec $ \vI sa ->
+            runServer_ networkConfig transport listeners outs . ActionSpec $ \vI sa ->
             logInfo "Started wallet, joining network" >> action vI sa
   where
     LoggingParams {..} = bpLoggingParams wpBaseParams
@@ -106,9 +110,9 @@ runRawStaticPeersWallet transport peers WalletParams {..}
 
 runServer_
     :: (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
-    => Transport m -> MkListeners m -> OutSpecs -> ActionSpec m b -> m b
-runServer_ transport mkl outSpecs =
-    runServer (simpleNodeEndPoint transport) (const noReceiveDelay) mkl
+    => NetworkConfig -> Transport m -> MkListeners m -> OutSpecs -> ActionSpec m b -> m b
+runServer_ networkConfig transport mkl outSpecs =
+    runServer networkConfig (simpleNodeEndPoint transport) (const noReceiveDelay) mkl
         outSpecs acquire release
   where
     acquire = const pass

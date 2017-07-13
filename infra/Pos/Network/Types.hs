@@ -27,9 +27,9 @@ data NetworkConfig = NetworkConfig
     -- ^ Known classifications of peers, along with their routing information.
     }
 
-emptyNetworkConfig :: NetworkConfig
-emptyNetworkConfig = NetworkConfig
-    { ncNodeType       = NodeCore
+emptyNetworkConfig :: NodeType -> NetworkConfig
+emptyNetworkConfig nt = NetworkConfig
+    { ncNodeType       = nt
     , ncClassification = mempty
     }
 

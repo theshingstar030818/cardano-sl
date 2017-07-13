@@ -18,6 +18,7 @@ import           Universum                       hiding (bracket)
 
 import           Control.Monad.Fix               (MonadFix)
 import qualified Control.Monad.Reader            as Mtl
+import qualified Data.Map                        as M
 import           Formatting                      (build, sformat, (%))
 import           Mockable                        (MonadMockable, Production (..), bracket,
                                                   killThread)
@@ -50,6 +51,7 @@ import           Pos.Discovery                   (DiscoveryContextSum (..))
 import           Pos.Launcher.Param              (BaseParams (..), LoggingParams (..),
                                                   NodeParams (..))
 import           Pos.Launcher.Resource           (NodeResources (..), hoistNodeResources)
+import           Pos.Network.Types               (NetworkConfig (..))
 import           Pos.Security                    (SecurityWorkersClass)
 import           Pos.Ssc.Class                   (SscConstraint)
 import           Pos.Statistics                  (EkgParams (..), StatsdParams (..))
@@ -104,7 +106,7 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
             nrJLogHandle
 
         runToProd jsonLogConfig $
-            runServer (simpleNodeEndPoint nrTransport) (const noReceiveDelay)
+            runServer ncNetworkConfig (simpleNodeEndPoint nrTransport) (const noReceiveDelay)
             listeners outSpecs
             startMonitoring stopMonitoring action
   where
@@ -167,7 +169,8 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
 runServer
     :: forall m t b .
        (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
-    => (m (Statistics m) -> NodeEndPoint m)
+    => NetworkConfig
+    -> (m (Statistics m) -> NodeEndPoint m)
     -> (m (Statistics m) -> ReceiveDelay m)
     -> MkListeners m
     -> OutSpecs
@@ -175,19 +178,23 @@ runServer
     -> (t -> m ())
     -> ActionSpec m b
     -> m b
-runServer mkTransport mkReceiveDelay mkL (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
+runServer NetworkConfig {..} mkTransport mkReceiveDelay mkL (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo: "%build) ourVerInfo
-    let ourNodeType = NodeCore
+    let ourNodeType = ncNodeType
         enqueuePolicy = OQ.defaultEnqueuePolicy ourNodeType
         dequeuePolicy = OQ.defaultDequeuePolicy ourNodeType
         failurePolicy = OQ.defaultFailurePolicy ourNodeType
     -- TODO use oq to implement subscription listeners.
     oq <- OQ.new ("self" :: String) enqueuePolicy dequeuePolicy failurePolicy
-    -- TODO getNodeType should look up the NodeId in a map to determine its
-    -- type, and use NodeEdge if it's not in there.
     let getNodeType :: NodeId -> NodeType
-        getNodeType = const NodeCore
+        -- TODO verify that the NodeId is normalized: if we use a numeric
+        -- address, but the peer uses a DNS name, we'll still correctly identify
+        -- it.
+        getNodeType nid = case M.lookup nid ncClassification of
+            -- If we don't know of this peer then we assume it's an edge node.
+            Nothing -> NodeEdge
+            Just (ty, _) -> ty
         getMsgType :: Msg -> MsgType
         getMsgType (Msg (ty, _)) = ty
         getMsgOrigin :: Msg -> Origin NodeId

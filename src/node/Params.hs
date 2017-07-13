@@ -94,7 +94,7 @@ getNodeParams args@Args {..} systemStart = do
     let npNetwork = getNetworkParams args
         -- TODO parse the network configuration from some yaml file.
         npNetworkConfig :: NetworkConfig
-        npNetworkConfig = emptyNetworkConfig
+        npNetworkConfig = emptyNetworkConfig nodeType
         devStakeDistr =
             devStakesDistr
                 (CLI.flatDistr commonArgs)
