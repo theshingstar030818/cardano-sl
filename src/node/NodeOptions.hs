@@ -18,6 +18,9 @@ import           Options.Applicative.Simple   (Parser, auto, execParser, footerD
                                                value)
 import           Prelude                      (show)
 import           Serokell.Util.OptParse       (fromParsec)
+import qualified Serokell.Util.Parse          as P
+import qualified Text.Parsec                  as P
+import qualified Text.Parsec.String           as P
 import           Text.PrettyPrint.ANSI.Leijen (Doc)
 import           Universum                    hiding (show)
 
@@ -127,9 +130,15 @@ argsParser = do
         help "Launch DHT supporter instead of full node"
     dhtNetworkAddress <- dhtNetworkAddressOption (Just ("0.0.0.0", 0))
     dhtKey <- optional dhtKeyOption
-    dhtPeersList <- many addrNodeOption
+    dhtPeersList <- many (addrNodeOption <|> neighbourOption)
     dhtPeersFile <- optional dhtPeersFileOption
     dhtExplicitInitial <- dhtExplicitInitialOption
+    _ <- nodeIdOption
+    _ <- strOption $
+        long "cluster" <>
+        metavar "FILEPATH" <>
+        value "cluster.yaml" <>
+        help "Path to the file with the cluster layout. Not used yet."
     jlPath <-
         CLI.optionalJSONPath
     maliciousEmulationAttacks <-
@@ -221,6 +230,28 @@ addrNodeOption =
         long "kademlia-peer" <>
         metavar "HOST:PORT" <>
         help "Identifier of a node in a Kademlia network"
+
+neighbourOption :: Parser NetworkAddress
+neighbourOption =
+    option (fromParsec neighbourParser) $
+        long "neighbour" <>
+        metavar "NAME:HOST[:PORT]" <>
+        help "Specify Host and Port (defaulting to 3000) for a static peer.  Not properly implemented yet, peers specified here will instead be treated as if they had been added using --kademlia-peer (ignoring the identifier)."
+
+neighbourParser :: P.Parser NetworkAddress
+neighbourParser = do
+    P.skipMany1 P.alphaNum -- ignoring the NODE_ID for now
+    _ <- P.char ':'
+    host <- encodeUtf8 <$> P.host
+    ip <- fromMaybe 3000 <$> (P.optionMaybe (P.char ':' *> P.port))
+    return (host, ip)
+
+nodeIdOption :: Parser String
+nodeIdOption = strOption $
+    long "node-id" <>
+    metavar "NODE_ID" <>
+    value "node0" <>
+    help "Later, this will specify the identifier for this node within the network.  Not implemented yet."
 
 getNodeOptions :: IO Args
 getNodeOptions = execParser programInfo
