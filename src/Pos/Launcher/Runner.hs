@@ -105,20 +105,28 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
             jsonLogConfigFromHandle
             nrJLogHandle
 
-        runToProd jsonLogConfig $
-            runServer ncNetworkConfig (simpleNodeEndPoint nrTransport) (const noReceiveDelay)
-            listeners outSpecs
-            startMonitoring stopMonitoring action
+        (oq, mkOq) <- initQueue ncNetworkConfig
+
+        runToProd jsonLogConfig oq $
+          runServer ncNetworkConfig
+                    (simpleNodeEndPoint nrTransport)
+                    (const noReceiveDelay)
+                    listeners
+                    outSpecs
+                    (startMonitoring oq)
+                    stopMonitoring
+                    mkOq
+                    action
   where
     NodeContext {..} = nrContext
     NodeParams {..} = ncNodeParams
     LoggingParams {..} = bpLoggingParams npBaseParams
-    startMonitoring node' =
+    startMonitoring oq node' =
         case npEnableMetrics of
             False -> return Nothing
             True  -> Just <$> do
                 ekgStore' <- setupMonitor
-                    (runProduction . runToProd JsonLogDisabled) node' nrEkgStore
+                    (runProduction . runToProd JsonLogDisabled oq) node' nrEkgStore
                 liftIO $ Metrics.registerGcMetrics ekgStore'
                 mEkgServer <- case npEkgParams of
                     Nothing -> return Nothing
@@ -154,8 +162,12 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
         DCStatic _          -> identity
         DCKademlia kademlia -> foreverRejoinNetwork kademlia
 
-    runToProd :: forall t . JsonLogConfig -> RealMode ssc t -> Production t
-    runToProd jlConf act = Mtl.runReaderT act $
+    runToProd :: forall t .
+                 JsonLogConfig
+              -> OQ (RealMode ssc)
+              -> RealMode ssc t
+              -> Production t
+    runToProd jlConf oq act = Mtl.runReaderT act $
         RealModeContext
             nrDBs
             nrSscState
@@ -165,6 +177,44 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
             jlConf
             lpRunnerTag
             nrContext
+            oq
+
+type OQ m =
+    OutboundQ (ClassifiedConversation PeerData PackingType NodeId m) NodeId
+
+newtype MkOq m = MkOq (
+       Converse PackingType PeerData m
+    -> m (OutboundQueue PackingType PeerData NodeId Msg m)
+  )
+
+initQueue
+    :: (MonadIO m, MonadIO m', MonadMockable m', WithLogger m')
+    => NetworkConfig
+    -> m (OQ m', MkOq m')
+initQueue NetworkConfig{..} = do
+    -- TODO: Find better self identifier (for improved logging)
+    oq <- OQ.new ("self" :: String) enqueuePolicy dequeuePolicy failurePolicy
+    return (oq, MkOq $ OQ.asOutboundQueue oq identity getNodeType getMsgType getMsgOrigin)
+  where
+    ourNodeType = ncNodeType
+    enqueuePolicy = OQ.defaultEnqueuePolicy ourNodeType
+    dequeuePolicy = OQ.defaultDequeuePolicy ourNodeType
+    failurePolicy = OQ.defaultFailurePolicy ourNodeType
+
+    -- TODO verify that the NodeId is normalized: if we use a numeric
+    -- address, but the peer uses a DNS name, we'll still correctly identify
+    -- it.
+    getNodeType :: NodeId -> NodeType
+    getNodeType nid = case M.lookup nid ncClassification of
+        -- If we don't know of this peer then we assume it's an edge node.
+        Nothing -> NodeEdge
+        Just (ty, _) -> ty
+
+    getMsgType :: Msg -> MsgType
+    getMsgType (Msg (ty, _)) = ty
+
+    getMsgOrigin :: Msg -> Origin NodeId
+    getMsgOrigin (Msg (_, origin)) = origin
 
 runServer
     :: forall m t b .
@@ -176,34 +226,13 @@ runServer
     -> OutSpecs
     -> (Node m -> m t)
     -> (t -> m ())
+    -> MkOq m
     -> ActionSpec m b
     -> m b
-runServer NetworkConfig {..} mkTransport mkReceiveDelay mkL (OutSpecs wouts) withNode afterNode (ActionSpec action) = do
+runServer NetworkConfig {..} mkTransport mkReceiveDelay mkL (OutSpecs wouts) withNode afterNode (MkOq mkOq) (ActionSpec action) = do
     stdGen <- liftIO newStdGen
     logInfo $ sformat ("Our verInfo: "%build) ourVerInfo
-    let ourNodeType = ncNodeType
-        enqueuePolicy = OQ.defaultEnqueuePolicy ourNodeType
-        dequeuePolicy = OQ.defaultDequeuePolicy ourNodeType
-        failurePolicy = OQ.defaultFailurePolicy ourNodeType
-    -- TODO use oq to implement subscription listeners.
-    oq <- OQ.new ("self" :: String) enqueuePolicy dequeuePolicy failurePolicy
-    let getNodeType :: NodeId -> NodeType
-        -- TODO verify that the NodeId is normalized: if we use a numeric
-        -- address, but the peer uses a DNS name, we'll still correctly identify
-        -- it.
-        getNodeType nid = case M.lookup nid ncClassification of
-            -- If we don't know of this peer then we assume it's an edge node.
-            Nothing -> NodeEdge
-            Just (ty, _) -> ty
-        getMsgType :: Msg -> MsgType
-        getMsgType (Msg (ty, _)) = ty
-        getMsgOrigin :: Msg -> Origin NodeId
-        getMsgOrigin (Msg (_, origin)) = origin
-        mkOutboundQueue
-            :: Converse PackingType PeerData m
-            -> m (OutboundQueue PackingType PeerData NodeId Msg m)
-        mkOutboundQueue converse = OQ.asOutboundQueue oq identity getNodeType getMsgType getMsgOrigin converse
-    node mkTransport mkReceiveDelay mkConnectDelay mkOutboundQueue stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
+    node mkTransport mkReceiveDelay mkConnectDelay mkOq stdGen BiP ourVerInfo defaultNodeEnvironment $ \__node ->
         NodeAction mkListeners' $ \sendActions ->
             bracket (withNode __node) afterNode (const (action ourVerInfo sendActions))
   where

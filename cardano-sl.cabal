@@ -59,6 +59,9 @@ library
                         Pos.Generator
                         Pos.Generator.Block
 
+                        -- Subscription
+                        Pos.Subscription
+
                         -- Genesis data
                         Pos.Genesis
 
@@ -346,6 +349,7 @@ library
                       , digest
                       , directory
                       , dlist
+                      , dns
                       , ed25519
                       , ekg
                       , ekg-core
@@ -363,6 +367,7 @@ library
                       , http-client
                       , http-client-tls
                       , http-conduit
+                      , iproute
                       , kademlia
                       , lens
                       , lifted-async

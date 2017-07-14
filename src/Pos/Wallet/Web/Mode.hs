@@ -14,6 +14,7 @@ import           Control.Lens                  (makeLensesWith)
 import qualified Control.Monad.Reader          as Mtl
 import           Ether.Internal                (HasLens (..))
 import           Mockable                      (Production, SharedAtomicT)
+import qualified Network.Broadcast.OutboundQueue as OQ
 import           System.Wlog                   (HasLoggerName (..))
 
 import           Pos.Block.Core                (Block, BlockHeader)
@@ -58,6 +59,7 @@ import           Pos.Slotting.MemState         (HasSlottingVar (..), MonadSlotsD
                                                 putSlottingDataDefault,
                                                 waitPenultEpochEqualsDefault)
 import           Pos.Ssc.Class.Types           (HasSscContext (..), SscBlock)
+import           Pos.Subscription              (MonadSubscription (..))
 import           Pos.Util                      (Some (..))
 import           Pos.Util.JsonLog              (HasJsonLogConfig (..), jsonLogDefault)
 import           Pos.Util.LoggerName           (HasLoggerName' (..), getLoggerNameDefault,
@@ -228,3 +230,12 @@ instance MonadTxHistory WalletSscType WalletWebMode where
 instance MonadWalletTracking WalletWebMode where
     syncWalletOnImport = syncWalletOnImportWebWallet . one
     txMempoolToModifier = txMempoolToModifierWebWallet
+
+instance MonadSubscription WalletWebMode where
+    subscribe nid = do
+        oq <- rmcOutboundQ . wwmcRealModeContext <$> ask
+        -- TODO: Properly classify the new node
+        OQ.subscribe oq $ mempty { OQ._peersCore = [[nid]] }
+    unsubscribe nid = do
+        oq <- rmcOutboundQ . wwmcRealModeContext <$> ask
+        OQ.unsubscribe oq nid

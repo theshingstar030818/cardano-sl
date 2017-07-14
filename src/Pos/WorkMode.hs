@@ -21,6 +21,8 @@ import           Control.Lens                (makeLensesWith)
 import qualified Control.Monad.Reader        as Mtl
 import           Ether.Internal              (HasLens (..))
 import           Mockable                    (Production, SharedAtomicT)
+import           Network.Broadcast.OutboundQueue (OutboundQ)
+import qualified Network.Broadcast.OutboundQueue as OQ
 import           System.Wlog                 (HasLoggerName (..), LoggerName)
 
 import           Pos.Block.BListener         (MonadBListener (..), onApplyBlocksStub,
@@ -31,6 +33,7 @@ import           Pos.Block.Types             (Undo)
 import           Pos.Communication.PeerState (HasPeerState (..), PeerStateCtx,
                                               WithPeerState (..), clearPeerStateDefault,
                                               getAllStatesDefault, getPeerStateDefault)
+import           Pos.Communication.Types     (PeerData, PackingType, NodeId)
 import           Pos.Context                 (NodeContext, HasSscContext (..),
                                               HasPrimaryKey (..), HasNodeContext (..))
 import           Pos.Core                    (IsHeader)
@@ -51,6 +54,7 @@ import           Pos.Discovery               (HasDiscoveryContextSum (..),
                                               MonadDiscovery (..), findPeersSum,
                                               getPeersSum)
 import           Pos.Reporting               (HasReportingContext (..))
+import           Pos.Subscription            (MonadSubscription (..))
 import           Pos.Shutdown                (HasShutdownContext (..))
 import           Pos.Slotting.Class          (MonadSlots (..))
 import           Pos.Slotting.Impl.Sum       (currentTimeSlottingSum,
@@ -86,7 +90,12 @@ data RealModeContext ssc = RealModeContext
     , rmcJsonLogConfig :: !JsonLogConfig
     , rmcLoggerName    :: !LoggerName
     , rmcNodeContext   :: !(NodeContext ssc)
+    , rmcOutboundQ     :: OutboundQ
+                           (OQ.ClassifiedConversation PeerData PackingType NodeId (RealMode ssc))
+                           NodeId
     }
+
+type RealMode ssc = Mtl.ReaderT (RealModeContext ssc) Production
 
 makeLensesWith postfixLFields ''RealModeContext
 
@@ -145,8 +154,6 @@ instance HasJsonLogConfig (RealModeContext ssc) where
 
 instance sa ~ SharedAtomicT Production => HasPeerState sa (RealModeContext ssc) where
     peerState = rmcPeerState_L
-
-type RealMode ssc = Mtl.ReaderT (RealModeContext ssc) Production
 
 instance {-# OVERLAPPING #-} HasLoggerName (RealMode ssc) where
     getLoggerName = getLoggerNameDefault
@@ -211,3 +218,12 @@ instance
 instance SscHelpersClass ssc =>
          MonadBlockDBGenericWrite (BlockHeader ssc) (Block ssc) Undo (RealMode ssc) where
     dbPutBlund = dbPutBlundDefault
+
+instance MonadSubscription (RealMode ssc) where
+    subscribe nid = do
+        oq <- rmcOutboundQ <$> ask
+        -- TODO: Properly classify the new node
+        OQ.subscribe oq $ mempty { OQ._peersCore = [[nid]] }
+    unsubscribe nid = do
+        oq <- rmcOutboundQ <$> ask
+        OQ.unsubscribe oq nid
