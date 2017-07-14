@@ -40,7 +40,7 @@ proposalRelay =
     InvReqData
         NoMempool $
         InvReqDataParams
-           { invReqMsgType = MsgMPC
+           { invReqMsgType = MsgTransaction
            , contentsToKey = \(up, _) -> pure . tag  $ hash up
            , handleInv = \_ -> isProposalNeeded . unTagged
            , handleReq = \_ -> getLocalProposalNVotes . unTagged
@@ -76,7 +76,7 @@ voteRelay =
     InvReqData
         NoMempool $
         InvReqDataParams
-           { invReqMsgType = MsgMPC
+           { invReqMsgType = MsgTransaction
            , contentsToKey = \UpdateVote{..} ->
                  pure $ tag (uvProposalId, uvKey, uvDecision)
            , handleInv = \_ (Tagged (id, pk, dec)) -> isVoteNeeded id pk dec

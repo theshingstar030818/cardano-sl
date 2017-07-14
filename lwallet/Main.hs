@@ -292,7 +292,7 @@ runCmd sendActions (DelegateLight i delegatePk startEpoch lastEpochM) CmdCtx{na}
         Just ss -> do
           let psk = safeCreatePsk ss delegatePk (startEpoch, fromMaybe 1000 lastEpochM)
           for_ na $ \nodeId ->
-             dataFlow "pskLight" sendActions MsgMPC nodeId psk
+             dataFlow "pskLight" sendActions MsgTransaction nodeId psk
    putText "Sent lightweight cert"
 runCmd sendActions (DelegateHeavy i delegatePk curEpoch) CmdCtx{na} = do
    issuerSk <- (!! i) <$> getSecretKeys
@@ -301,7 +301,7 @@ runCmd sendActions (DelegateHeavy i delegatePk curEpoch) CmdCtx{na} = do
         Just ss -> do
           let psk = safeCreatePsk ss delegatePk curEpoch
           for_ na $ \nodeId ->
-             dataFlow "pskHeavy" sendActions MsgMPC nodeId psk
+             dataFlow "pskHeavy" sendActions MsgTransaction nodeId psk
    putText "Sent heavyweight cert"
 runCmd _ (AddKeyFromPool i) CmdCtx{..} = do
    let key = skeys !! i
