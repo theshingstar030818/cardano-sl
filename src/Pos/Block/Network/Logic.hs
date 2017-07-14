@@ -115,7 +115,7 @@ triggerRecovery :: forall ssc ctx m.
     => SendActions m -> m ()
 triggerRecovery sendActions = unlessM recoveryInProgress $ do
     logDebug "Recovery triggered, requesting tips from neighbors"
-    void (converseToNeighbors sendActions (sendMsg MsgBlockHeader) (pure . Conversation . requestTip) >>= waitForConversations) `catch`
+    void (converseToNeighbors sendActions (sendMsg MsgRequestBlockHeaders) (pure . Conversation . requestTip) >>= waitForConversations) `catch`
         \(e :: SomeException) -> do
            logDebug ("Error happened in triggerRecovery: " <> show e)
            throwM e

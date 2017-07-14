@@ -46,7 +46,7 @@ announceBlock
     => SendActions m -> MainBlockHeader ssc -> m ()
 announceBlock sendActions header = do
     logDebug $ sformat ("Announcing header to others:\n"%build) header
-    void $ converseToNeighbors sendActions (sendMsg MsgBlockHeader) announceBlockDo >>= waitForConversations
+    void $ converseToNeighbors sendActions (sendMsg MsgAnnounceBlockHeader) announceBlockDo >>= waitForConversations
   where
     announceBlockDo nodeId = pure $ Conversation $ \cA -> do
         SecurityParams{..} <- view (lensOf @SecurityParams)
