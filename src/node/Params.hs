@@ -10,8 +10,9 @@ import           Universum
 
 import qualified Data.ByteString.Char8 as BS8 (unpack)
 import qualified Data.Set              as S (fromList)
+import           Formatting            (sformat, shown, (%))
 import qualified Network.Transport.TCP as TCP (TCPAddr (..), TCPAddrInfo (..))
-import           System.Wlog           (LoggerName, WithLogger)
+import           System.Wlog           (LoggerName, WithLogger, logInfo)
 
 import qualified Pos.CLI               as CLI
 import           Pos.Constants         (isDevelopment)
@@ -100,6 +101,7 @@ getNodeParams args@Args {..} systemStart = do
             then genesisUtxo Nothing (devAddrDistr devStakeDistr)
             else genesisUtxo (Just genesisProdBootStakeholders)
                              genesisProdAddrDistribution
+    logInfo $ sformat ("npCustomUtxo: "%shown) npCustomUtxo
     pure NodeParams
         { npDbPathM = dbPath
         , npRebuildDb = rebuildDB
