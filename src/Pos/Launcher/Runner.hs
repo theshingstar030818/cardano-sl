@@ -51,7 +51,7 @@ import           Pos.Discovery                   (DiscoveryContextSum (..))
 import           Pos.Launcher.Param              (BaseParams (..), LoggingParams (..),
                                                   NodeParams (..))
 import           Pos.Launcher.Resource           (NodeResources (..), hoistNodeResources)
-import           Pos.Network.Types               (NetworkConfig (..))
+import           Pos.Network.Types               (NetworkConfig (..), NodeName)
 import           Pos.Security                    (SecurityWorkersClass)
 import           Pos.Ssc.Class                   (SscConstraint)
 import           Pos.Statistics                  (EkgParams (..), StatsdParams (..))
@@ -105,7 +105,7 @@ runRealModeDo NodeResources {..} listeners outSpecs action =
             jsonLogConfigFromHandle
             nrJLogHandle
 
-        (oq, mkOq) <- initQueue ncNetworkConfig
+        (oq, mkOq) <- initQueue ncNetworkConfig ncSelfName
 
         runToProd jsonLogConfig oq $
           runServer ncNetworkConfig
@@ -189,11 +189,11 @@ newtype MkOq m = MkOq (
 
 initQueue
     :: (MonadIO m, MonadIO m', MonadMockable m', WithLogger m')
-    => NetworkConfig
+    => NetworkConfig NodeId
+    -> NodeName
     -> m (OQ m', MkOq m')
-initQueue NetworkConfig{..} = do
-    -- TODO: Find better self identifier (for improved logging)
-    oq <- OQ.new ("self" :: String) enqueuePolicy dequeuePolicy failurePolicy
+initQueue NetworkConfig{..} selfName = do
+    oq <- OQ.new selfName enqueuePolicy dequeuePolicy failurePolicy
     return (oq, MkOq $ OQ.asOutboundQueue oq identity getNodeType getMsgType getMsgOrigin)
   where
     ourNodeType = ncNodeType
@@ -219,7 +219,7 @@ initQueue NetworkConfig{..} = do
 runServer
     :: forall m t b .
        (MonadIO m, MonadMockable m, MonadFix m, WithLogger m)
-    => NetworkConfig
+    => NetworkConfig NodeId
     -> (m (Statistics m) -> NodeEndPoint m)
     -> (m (Statistics m) -> ReceiveDelay m)
     -> MkListeners m

@@ -50,7 +50,7 @@ import           Pos.Discovery                 (DiscoveryContextSum,
 import           Pos.Launcher.Param            (BaseParams (..), NodeParams (..),
                                                 RelayParams (..))
 import           Pos.Lrc.Context               (LrcContext)
-import           Pos.Network.Types             (NetworkConfig (..))
+import           Pos.Network.Types             (NetworkConfig (..), NodeName)
 import           Pos.Reporting.MemState        (HasLoggerConfig (..),
                                                 HasReportServers (..),
                                                 HasReportingContext (..),
@@ -144,7 +144,9 @@ data NodeContext ssc = NodeContext
     -- ^ Settings for global Txp.
     , ncConnectedPeers      :: !ConnectedPeers
     -- ^ Set of peers that we're connected to.
-    , ncNetworkConfig       :: !NetworkConfig
+    , ncNetworkConfig       :: !(NetworkConfig NodeId)
+    -- ^ Name of this node
+    , ncSelfName            :: !NodeName
     }
 
 makeLensesWith postfixLFields ''NodeContext

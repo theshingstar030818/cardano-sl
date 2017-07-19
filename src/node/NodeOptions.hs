@@ -65,6 +65,8 @@ data Args = Args
     , peersFile                 :: !(Maybe FilePath)
       -- ^ A file containing a list of peers to use to supplement the ones
       -- given directly on command line.
+    , nodeId                    :: !NodeName
+    , topologyFile              :: !() -- FilePath
     , jlPath                    :: !(Maybe FilePath)
     , maliciousEmulationAttacks :: ![AttackType]
     , maliciousEmulationTargets :: ![AttackTarget]
@@ -138,12 +140,8 @@ argsParser = do
     nodeType <- nodeTypeOption
     peers <- (++) <$> corePeersList <*> relayPeersList
     peersFile <- optional dhtPeersFileOption
-    _ <- nodeIdOption
-    _ <- strOption $
-        long "cluster" <>
-        metavar "FILEPATH" <>
-        value "cluster.yaml" <>
-        help "Path to the file with the cluster layout. Not used yet."
+    nodeId <- nodeIdOption
+    topologyFile <- topologyFileOption
     jlPath <-
         CLI.optionalJSONPath
     maliciousEmulationAttacks <-
@@ -258,13 +256,6 @@ neighbourParser = do
     host <- encodeUtf8 <$> P.host
     ip <- fromMaybe 3000 <$> (P.optionMaybe (P.char ':' *> P.port))
     return (host, ip)
-
-nodeIdOption :: Parser String
-nodeIdOption = strOption $
-    long "node-id" <>
-    metavar "NODE_ID" <>
-    value "node0" <>
-    help "Later, this will specify the identifier for this node within the network.  Not implemented yet."
 
 getNodeOptions :: IO Args
 getNodeOptions = execParser programInfo

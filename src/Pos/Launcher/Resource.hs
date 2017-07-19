@@ -276,8 +276,9 @@ allocateNodeContext np@NodeParams {..} sscnp putSlotting = do
             , ncTxpGlobalSettings = explorerTxpGlobalSettings
 #else
             , ncTxpGlobalSettings = txpGlobalSettings
-            , ncNetworkConfig = npNetworkConfig
 #endif
+            , ncNetworkConfig = npNetworkConfig
+            , ncSelfName = npSelfName
             , ..
             }
     -- TODO bounded queue not necessary.

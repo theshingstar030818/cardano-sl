@@ -23,7 +23,7 @@ import           Pos.Communication.Types (NodeId)
 import           Pos.Core                (HasPrimaryKey (..), Timestamp)
 import           Pos.Crypto              (SecretKey)
 import           Pos.DHT.Real            (KademliaParams)
-import           Pos.Network.Types       (NetworkConfig)
+import           Pos.Network.Types       (NetworkConfig, NodeName)
 import           Pos.Reporting.MemState  (HasReportServers (..))
 import           Pos.Security.Params     (SecurityParams)
 import           Pos.Statistics          (EkgParams, StatsdParams)
@@ -84,7 +84,8 @@ data NodeParams = NodeParams
     , npEnableMetrics  :: !Bool                 -- ^ Gather runtime statistics.
     , npEkgParams      :: !(Maybe EkgParams)    -- ^ EKG statistics monitoring.
     , npStatsdParams   :: !(Maybe StatsdParams) -- ^ statsd statistics backend.
-    , npNetworkConfig  :: !NetworkConfig
+    , npNetworkConfig  :: !(NetworkConfig NodeId)
+    , npSelfName       :: !NodeName
     , npRelayParams    :: !RelayParams
     } -- deriving (Show)
 
