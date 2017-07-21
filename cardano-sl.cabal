@@ -523,6 +523,7 @@ executable cardano-node
   if os(linux)
     ghc-options:       -optl-fuse-ld=gold
     ld-options:        -fuse-ld=gold
+  -- extra-libraries:     m
 
   default-extensions:   DeriveDataTypeable
                         DeriveGeneric

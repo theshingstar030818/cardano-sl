@@ -21,7 +21,7 @@ runInShell cabal2nix \
   https://github.com/input-output-hk/stack2nix.git > "$scriptDir/stack2nix.nix"
 
 # Build stack2nix Nix package
-nix-build "${scriptDir}/.." -A stack2nix -o "$scriptDir/stack2nix" -Q
+nix-build "${scriptDir}/.." -A stack2nix -o "$scriptDir/stack2nix"
 
 pushd "${scriptDir}"
 # Generate cardano-sl package set
