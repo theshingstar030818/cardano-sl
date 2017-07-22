@@ -170,6 +170,32 @@ function node_cmd {
   echo ''
 }
 
+function bench_cmd {
+  local i=$1
+  local dht_cmd=$2
+  local stake_distr=$3
+  local system_start=$4
+  local time=$5
+  local conc=$6
+  local delay=$7
+  local sendmode=$8
+  ensure_run
+
+  echo -n "$(find_binary cardano-wallet)"
+  for j in $(seq 0 $((i-1)))
+  do
+      echo -n " --peer 127.0.0.1:"`get_port $j`
+  done
+  # echo -n " $(logs node$i.log)"
+  echo -n " --system-start $system_start"
+  echo -n " $stake_distr"
+  echo -n " cmd --commands \"send-to-all-genesis $time $conc $delay 10 $sendmode tps-sent.csv\""
+
+  echo ''
+}
+
+
+
 function has_nix {
     which nix-shell 2> /dev/null
     return $?
