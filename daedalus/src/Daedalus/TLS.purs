@@ -11,9 +11,10 @@ module Daedalus.TLS
 import Prelude
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Exception (EXCEPTION)
-import Node.FS.Sync (readFile)
+import Node.FS.Sync (readTextFile)
 import Node.FS as FS
 import Node.HTTP.Client (protocol, hostname, port, RequestOptions)
+import Node.Encoding (Encoding (UTF8))
 import Data.Options (opt, (:=), Option, Options (..))
 import Data.Array (filter, head)
 import Data.Tuple (fst, snd)
@@ -25,6 +26,7 @@ import Data.Monoid (mempty)
 import Data.Foreign (readString, readInt)
 import Control.Monad.Except (runExcept)
 import Data.Either (either)
+import Unsafe.Coerce (unsafeCoerce)
 
 -- TODO: rename to HTTPSOptions
 type TLSOptions = Options RequestOptions
@@ -37,7 +39,7 @@ ca = opt "ca"
 
 initTLS :: forall eff. String -> Eff (fs :: FS, err :: EXCEPTION | eff) TLSOptions
 initTLS caFilePath = do
-    caFile <- readFile caFilePath
+    caFile <- unsafeCoerce <$> readTextFile UTF8 caFilePath
     pure $ daedalusTLSOptions <> ca := caFile
     -- TODO: check does this reueses openned TLS connection or is a new connection
     -- initialized on every request. If later, then we have to reuse it (look at nodejs https agents)
