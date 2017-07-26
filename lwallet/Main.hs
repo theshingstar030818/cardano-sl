@@ -89,6 +89,11 @@ import qualified Network.Transport.TCP      as TCP (TCPAddr (..))
 import           WalletOptions              (WalletAction (..), WalletOptions (..),
                                              getWalletOptions)
 
+import Pos.Communication.Types.Protocol (Conversation(..))
+import Node.Conversation (ConversationActions(..))
+import Node.Message.Class (Message(..))
+import System.Wlog.CanLog
+
 data CmdCtx =
   CmdCtx
     { skeys :: [SecretKey]
@@ -390,6 +395,8 @@ main = do
             }
         baseParams = BaseParams { bpLoggingParams = logParams }
 
+    print logParams
+
     let sysStart = CLI.sysStart woCommonArgs
     let devStakeDistr =
             devStakesDistr
@@ -424,10 +431,12 @@ main = do
                 (powerLift :: forall t . Production t -> LightWalletMode t)
                 transport
 
+            worker' specs w = worker specs $ \sa -> w (addLogging sa)
+
             plugins :: ([ WorkerSpec LightWalletMode ], OutSpecs)
             plugins = first pure $ case woAction of
-                Repl    -> worker runCmdOuts $ runWalletRepl opts
-                Cmd cmd -> worker runCmdOuts $ runWalletCmd opts cmd
+                Repl    -> worker' runCmdOuts $ runWalletRepl opts
+                Cmd cmd -> worker' runCmdOuts $ runWalletCmd opts cmd
                 Serve __webPort __webDaedalusDbPath -> error "light wallet server is disabled"
                 -- Serve webPort webDaedalusDbPath -> worker walletServerOuts $ \sendActions ->
                 --     walletServeWebLite sendActions webDaedalusDbPath False webPort
@@ -439,3 +448,27 @@ main = do
                 runWalletStaticPeers transport' (S.fromList allPeers) params plugins
             NistBeaconAlgo ->
                 logError "Wallet does not support NIST beacon!"
+
+addLogging :: forall m. WithLogger m => SendActions m -> SendActions m
+addLogging SendActions{..} = SendActions{
+      enqueueMsg = error "unused"
+    , withConnectionTo = aux
+    }
+  where
+    aux nid k = withConnectionTo nid $ \peerData -> fmap auxConv (k peerData)
+    auxConv (Conversation k) = Conversation (\acts -> k (auxActs acts))
+
+    auxActs :: (Message snd, Message rcv)
+            => ConversationActions snd rcv m -> ConversationActions snd rcv m
+    auxActs (ConversationActions{..}) = ConversationActions {
+        send = \body -> do
+                 logDebug $ sformat ("Light wallet sending " % stext) (formatMessage body)
+                 send body
+      , recv = \limit -> do
+                 mRcv <- recv limit
+                 logDebug $
+                   case mRcv of
+                     Nothing  -> sformat ("Light wallet received end of input")
+                     Just rcv -> sformat ("Light wallet received " % stext) (formatMessage rcv)
+                 return mRcv
+      }

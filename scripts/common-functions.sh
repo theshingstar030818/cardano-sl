@@ -158,7 +158,7 @@ function bench_cmd {
   do
       echo -n " --peer 127.0.0.1:"`get_port $j`
   done
-  # echo -n " $(logs node$i.log)"
+  echo -n " $(logs node_lightwallet.log)"
   echo -n " --system-start $system_start"
   echo -n " $stake_distr"
   echo -n " cmd --commands \"send-to-all-genesis $time $conc $delay 10 $sendmode tps-sent.csv\""
