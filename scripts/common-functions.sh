@@ -89,7 +89,7 @@ function dht_config {
         peer_config $j
         j=$((j+1))
     done
-    echo -n " --explicit-initial --disable-propagation"
+    echo -n " --disable-propagation"
   else
     while [[ $# -gt 0 ]]; do
       peer_config $1

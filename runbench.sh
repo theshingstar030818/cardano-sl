@@ -6,6 +6,12 @@
 
 stack build --flag cardano-sl-core:dev-mode --flag cardano-sl-core:dev-custom-config --ghc-options=-DCONFIG=benchmark
 
+# Continue only if the build exited normally.
+if [[ $? -ne 0 ]]
+then
+  exit $?
+fi
+
 # CONC=4 transaction generator spawns 4 threads 
 #   all send about 2 transactions per second
 # 3 : 3 nodes
