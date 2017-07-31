@@ -84,7 +84,7 @@ while [[ $i -lt $panesCnt ]]; do
       fi
   fi
 
-  stake_distr=" --flat-distr \"($n, 100000)\" "
+  stake_distr=" --rich-poor-distr \"($n,50000,6000000000,0.99)\" "
   kademlia_dump_path="kademlia$i.dump"
   static_peers=''
 
