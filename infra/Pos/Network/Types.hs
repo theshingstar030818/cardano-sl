@@ -17,7 +17,7 @@ module Pos.Network.Types
     , initQueue
       -- * Auxiliary
     , Resolver
-    , initDnsOnDemand
+    , initDnsOnUse
       -- * Re-exports
       -- ** from .DnsDomains
     , DnsDomains(..)
@@ -29,8 +29,6 @@ module Pos.Network.Types
     , NodeId (..)
     ) where
 
-import           Control.Concurrent                    (ThreadId, forkIO,
-                                                        modifyMVar_, killThread)
 import           Data.IP                               (IPv4)
 import           Network.Broadcast.OutboundQueue       (OutboundQ)
 import qualified Network.Broadcast.OutboundQueue       as OQ
@@ -87,9 +85,9 @@ data Topology kademlia =
     -- | All peers of the node have been statically configured
     --
     -- This is used for core and relay nodes
-    TopologyCore !StaticPeers
+    TopologyCore !StaticPeers !(Maybe kademlia)
 
-  | TopologyRelay !StaticPeers !kademlia
+  | TopologyRelay !StaticPeers !(Maybe kademlia)
 
     -- | We discover our peers through DNS
     --
@@ -119,11 +117,16 @@ topologyNodeType TopologyLightWallet{} = NodeEdge
 
 -- | The NodeType to assign to subscribers. Give Nothing if subscribtion
 -- is not allowed for a node with this topology.
+--
+-- TODO: We allow corf nodes to run Kademlia, but we do not run the subscription
+-- listener on them currently. We may wish to make that configurable.
 topologySubscriberNodeType :: Topology kademlia -> Maybe NodeType
+topologySubscriberNodeType TopologyCore{}        = Nothing
 topologySubscriberNodeType TopologyRelay{}       = Just NodeEdge
-topologySubscriberNodeType TopologyTraditional{} = Just NodeCore
+topologySubscriberNodeType TopologyBehindNAT{}   = Nothing
 topologySubscriberNodeType TopologyP2P{}         = Just NodeRelay
-topologySubscriberNodeType _                     = Nothing
+topologySubscriberNodeType TopologyTraditional{} = Just NodeCore
+topologySubscriberNodeType TopologyLightWallet{} = Nothing
 
 data SubscriptionWorker kademlia =
     SubscriptionWorkerBehindNAT (DnsDomains DNS.Domain)
@@ -133,26 +136,30 @@ data SubscriptionWorker kademlia =
 topologySubscriptionWorker :: Topology kademlia -> Maybe (SubscriptionWorker kademlia)
 topologySubscriptionWorker = go
   where
+    go TopologyCore{}                     = Nothing
+    go TopologyRelay{}                    = Nothing
     go (TopologyBehindNAT doms)           = Just $ SubscriptionWorkerBehindNAT doms
     go (TopologyP2P v f kademlia)         = Just $ SubscriptionWorkerKademlia kademlia NodeRelay v f
     go (TopologyTraditional v f kademlia) = Just $ SubscriptionWorkerKademlia kademlia NodeCore v f
-    go _otherwise                         = Nothing
+    go TopologyLightWallet{}              = Nothing
 
 -- | Should we register to the Kademlia network?
 topologyRunKademlia :: Topology kademlia -> Maybe kademlia
 topologyRunKademlia = go
   where
-    go (TopologyRelay _ kademlia)         = Just kademlia
-    go (TopologyP2P _ _ kademlia)         = Just kademlia
+    go (TopologyCore  _        mKademlia) = mKademlia
+    go (TopologyRelay _        mKademlia) = mKademlia
+    go TopologyBehindNAT{}                = Nothing
+    go (TopologyP2P _ _         kademlia) = Just kademlia
     go (TopologyTraditional _ _ kademlia) = Just kademlia
-    go _                                  = Nothing
+    go TopologyLightWallet{}              = Nothing
 
 -- | Variation on resolveDnsDomains that returns node IDs
 resolveDnsDomains :: NetworkConfig kademlia
                   -> DnsDomains DNS.Domain
                   -> IO (Either [DNSError] [NodeId])
 resolveDnsDomains NetworkConfig{..} dnsDomains =
-    initDnsOnDemand $ \resolve ->
+    initDnsOnUse $ \resolve ->
       fmap (fmap addressToNodeId) <$> DnsDomains.resolveDnsDomains
                                         resolve
                                         ncDefaultPort
@@ -204,7 +211,7 @@ initQueue NetworkConfig{..} = do
       TopologyTraditional{} ->
         -- Kademlia worker is responsible for adding peers
         return ()
-      TopologyCore StaticPeers{..} ->
+      TopologyCore StaticPeers{..} _ ->
         staticPeersOnChange $ \peers ->
           OQ.updatePeersBucket oq BucketStatic (\_ -> peers)
       TopologyRelay StaticPeers{..} _ ->
@@ -225,45 +232,15 @@ initQueue NetworkConfig{..} = do
 
 type Resolver = DNS.Domain -> IO (Either DNSError [IPv4])
 
--- | Initialize the DNS library only when we need to
+-- | Initialize the DNS library whenever it's used
 --
--- This is a bit awkward due to the lexical scoping enforced by the DNS
--- library. We therefore spawn a thread to run the DNS resolver, but only when
--- we need it.
+-- This isn't great for performance but it means that we do not initialize it
+-- when we need it; initializing it once only on demand is possible but requires
+-- jumping through too many hoops.
 --
 -- TODO: Make it possible to change DNS config (esp for use on Windows).
-initDnsOnDemand :: (Resolver -> IO a) -> IO a
-initDnsOnDemand k = do
-    request   :: MVar DNS.Domain               <- newEmptyMVar
-    response  :: MVar (Either DNSError [IPv4]) <- newEmptyMVar
-
-    let dnsHandler :: IO ()
-        dnsHandler = do
-          resolvSeed <- DNS.makeResolvSeed DNS.defaultResolvConf
-          DNS.withResolver resolvSeed $ \resolver -> forever $ do
-            dom <- takeMVar request
-            putMVar response =<< DNS.lookupA resolver dom
-
-    dnsThread :: MVar (Maybe ThreadId) <- newMVar Nothing
-
-    let startDnsHandler :: IO ()
-        startDnsHandler =
-          modifyMVar_ dnsThread $ \mThread ->
-            case mThread of
-              Just tid -> return $ Just tid
-              Nothing  -> Just <$> forkIO dnsHandler
-
-        killDnsHandler :: IO ()
-        killDnsHandler =
-          modifyMVar_ dnsThread $ \mThread ->
-            case mThread of
-              Just tid -> killThread tid >> return Nothing
-              Nothing  -> return Nothing
-
-    let resolve :: DNS.Domain -> IO (Either DNSError [IPv4])
-        resolve dom = do
-          startDnsHandler
-          putMVar request dom
-          takeMVar response
-
-    k resolve `finally` killDnsHandler
+initDnsOnUse :: (Resolver -> IO a) -> IO a
+initDnsOnUse k = k $ \dom -> do
+    resolvSeed <- DNS.makeResolvSeed DNS.defaultResolvConf
+    DNS.withResolver resolvSeed $ \resolver ->
+      DNS.lookupA resolver dom
