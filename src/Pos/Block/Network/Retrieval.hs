@@ -124,8 +124,19 @@ retrievalWorkerImpl SendActions {..} =
         endedRecoveryVar <- newEmptyMVar
         let cont (headers :: NewestFirst NE (BlockHeader ssc)) =
                 let firstHeader = headers ^. _Wrapped . _neLast
-                in handleCHsValid enqueueMsg endedRecoveryVar nodeId
-                                  firstHeader (headerHash header)
+                -- Important that we don't wait for those conversations to
+                -- dequeue and finish.
+                -- This will run inside another conversation (the one enqueued
+                -- next, which calls requestHeaders). If we wait for the
+                -- results in there, the outbound queue may deadlock depending
+                -- on how many in-flight conversations are allowed.
+                -- As a general rule, if enqueueing a conversation within
+                -- another conversation, don't wait on it.
+                --
+                -- TBD does this newly introduced asynchronicity break anything
+                -- in the block logic?
+                in  void $ handleCHsValid enqueueMsg endedRecoveryVar nodeId
+                                          firstHeader (headerHash header)
         void $ enqueueMsg (MsgRequestBlock (S.singleton nodeId)) $ \_ _ -> pure $ Conversation $ \conv -> do
             logInfo "Edsko thinks we'll see this one"
             requestHeaders cont mgh nodeId conv
@@ -266,9 +277,10 @@ processContHeader
 processContHeader enqueue endedRecoveryVar nodeId header = do
     classificationRes <- classifyNewHeader header
     case classificationRes of
-        CHContinues ->
-            handleCHsValid enqueue endedRecoveryVar nodeId
-                           header (headerHash header)
+        CHContinues -> do
+            cs <- handleCHsValid enqueue endedRecoveryVar nodeId
+                                 header (headerHash header)
+            void $ waitForConversations cs
         res -> logDebug $
             "processContHeader: expected header to " <>
              "be continuation, but it's " <> show res
@@ -281,12 +293,12 @@ handleCHsValid
     -> NodeId
     -> BlockHeader ssc
     -> HeaderHash
-    -> m ()
+    -> m (Map NodeId (m ()))
 handleCHsValid enqueue endedRecoveryVar nodeId lcaChild newestHash = do
     let lcaChildHash = headerHash lcaChild
     logDebug $ sformat validFormat lcaChildHash newestHash
     logDebug "Going to send MsgRequestBlock now"
-    its <- enqueue (MsgRequestBlock (S.singleton nodeId)) $ \_ _ -> pure $ Conversation $
+    enqueue (MsgRequestBlock (S.singleton nodeId)) $ \_ _ -> pure $ Conversation $
       \(conv :: ConversationActions MsgGetBlocks (MsgBlock ssc) m) -> do
         logDebug "Inside MsgRequestBlock conversation"
         send conv $ mkBlocksRequest lcaChildHash newestHash
@@ -319,7 +331,6 @@ handleCHsValid enqueue endedRecoveryVar nodeId lcaChild newestHash = do
                                 then isJust <$> tryTakeTMVar recHeaderVar
                                 else return False
                 void $ tryPutMVar endedRecoveryVar endedRecovery
-    void $ waitForConversations its
   where
     validFormat =
         "Requesting blocks from " %shortHashF % " to " %shortHashF
