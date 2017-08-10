@@ -6,7 +6,8 @@ module Pos.Recovery.Info
        , recoveryCommGuard
        ) where
 
-import           System.Wlog (WithLogger, logDebug)
+import           System.Wlog (WithLogger-- , logDebug
+                             )
 import           Universum
 
 class Monad m => MonadRecoveryInfo m where
@@ -20,6 +21,7 @@ class Monad m => MonadRecoveryInfo m where
 recoveryCommGuard
     :: (MonadRecoveryInfo m, WithLogger m)
     => m () -> m ()
-recoveryCommGuard action = ifM recoveryInProgress onIgnore action
-  where
-    onIgnore = logDebug "recoveryCommGuard: recovery in process, skipping action"
+-- recoveryCommGuard action = ifM recoveryInProgress onIgnore action
+--   where
+--     onIgnore = logDebug "recoveryCommGuard: recovery in process, skipping action"
+recoveryCommGuard = identity

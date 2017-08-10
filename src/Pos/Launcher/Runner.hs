@@ -22,7 +22,7 @@ import           Universum                       hiding (bracket)
 
 import           Control.Monad.Fix               (MonadFix)
 import qualified Control.Monad.Reader            as Mtl
-import           Formatting                      (build, sformat, (%))
+import           Formatting                      (build, sformat, (%), shown)
 import           Mockable                        (MonadMockable, Production (..), bracket,
                                                   killThread, Throw, throw, Mockable,
                                                   async, cancel)
@@ -38,7 +38,7 @@ import qualified System.Metrics                  as Metrics
 import           System.Random                   (newStdGen)
 import qualified System.Remote.Monitoring        as Monitoring
 import qualified System.Remote.Monitoring.Statsd as Monitoring
-import           System.Wlog                     (WithLogger, logInfo)
+import           System.Wlog                     (WithLogger, logInfo, logDebug)
 
 import           Pos.Binary                      ()
 import           Pos.Communication               (ActionSpec (..), bipPacking, InSpecs (..),
@@ -168,9 +168,14 @@ runRealModeDo NodeResources {..} outSpecs action =
             oq
 
 sendMsgFromConverse
-    :: N.Converse PackingType PeerData m
+    :: WithLogger m => N.Converse PackingType PeerData m
     -> OQ.SendMsg m (EnqueuedConversation m) NodeId
-sendMsgFromConverse converse (EnqueuedConversation (_, k)) nodeId =
+sendMsgFromConverse converse (EnqueuedConversation (msgType, k)) nodeId = do
+    logDebug $ sformat
+        ( "Starting conversation of type "
+        % shown
+        % "with node "
+        % shown) msgType nodeId
     N.converseWith converse nodeId (k nodeId)
 
 oqEnqueue

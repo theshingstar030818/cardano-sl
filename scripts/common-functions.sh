@@ -152,7 +152,7 @@ function bench_cmd {
   ensure_run
 
   echo -n "$(find_binary cardano-wallet)"
-  for j in $(seq 0 $((i-1)))
+  for j in $((i-1))
   do
       echo -n " --peer 127.0.0.1:"`get_port $j`
   done

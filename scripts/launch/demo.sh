@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -o xtrace
 
+pwd=$(pwd)
 base=$(dirname "$0")
 source "$base"/../common-functions.sh
 
@@ -36,7 +37,7 @@ fi
 # Use "flat" for flat_distr. Anything else will use rich_poor_distr
 stake_distr_param=$3
 flat_distr=" --flat-distr \"($n, 100000)\" "
-rich_poor_distr=" --rich-poor-distr \"($n,50000,6000000000,0.99)\" "
+rich_poor_distr=" --rich-poor-distr \"(3,50000,6000000000,0.99)\" "
 
 # Stats are not mandatory either
 stats=$4
@@ -98,12 +99,12 @@ while [[ $i -lt $panesCnt ]]; do
   pane="${window}.$i"
 
   if [[ $i -lt $n ]]; then
-    tmux send-keys "$(node_cmd $i "$stats" "$stake_distr" "$wallet_args" "$system_start" "$config_dir") --no-ntp" C-m
+    tmux send-keys "cd $pwd && $(node_cmd $i "$stats" "$stake_distr" "$wallet_args" "$system_start" "$config_dir") --no-ntp" C-m
   else
     # Number of transactions to send per-thread: 300
     # Concurrency (number of threads sending transactions); $CONC
     # Delay between sends on each thread: 500 milliseconds
-    tmux send-keys -t ${pane} "sleep 40s && $(bench_cmd $i "$stake_distr" "$system_start" 300 $CONC 500 neighbours)" C-m
+    tmux send-keys "cd $pwd && sleep 40s && $(bench_cmd $i "$stake_distr" "$system_start" 3000 $CONC 500 neighbours)" C-m
   fi
   i=$((i+1))
 done

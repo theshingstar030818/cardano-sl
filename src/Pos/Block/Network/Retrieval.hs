@@ -126,9 +126,11 @@ retrievalWorkerImpl SendActions {..} =
                 let firstHeader = headers ^. _Wrapped . _neLast
                 in handleCHsValid enqueueMsg endedRecoveryVar nodeId
                                   firstHeader (headerHash header)
-        void $ enqueueMsg (MsgRequestBlock (S.singleton nodeId)) $ \_ _ -> pure $ Conversation $ \conv ->
+        void $ enqueueMsg (MsgRequestBlock (S.singleton nodeId)) $ \_ _ -> pure $ Conversation $ \conv -> do
+            logInfo "Edsko thinks we'll see this one"
             requestHeaders cont mgh nodeId conv
                 `finally` void (tryPutMVar endedRecoveryVar False)
+            logInfo "... but not this one"
         -- Block until the conversation has ended.
         whenM (readMVar endedRecoveryVar) $
             logInfo "Recovery mode exited gracefully"
@@ -283,8 +285,10 @@ handleCHsValid
 handleCHsValid enqueue endedRecoveryVar nodeId lcaChild newestHash = do
     let lcaChildHash = headerHash lcaChild
     logDebug $ sformat validFormat lcaChildHash newestHash
+    logDebug "Going to send MsgRequestBlock now"
     its <- enqueue (MsgRequestBlock (S.singleton nodeId)) $ \_ _ -> pure $ Conversation $
       \(conv :: ConversationActions MsgGetBlocks (MsgBlock ssc) m) -> do
+        logDebug "Inside MsgRequestBlock conversation"
         send conv $ mkBlocksRequest lcaChildHash newestHash
         chainE <- runExceptT (retrieveBlocks conv lcaChild newestHash)
         recHeaderVar <- view (lensOf @RecoveryHeaderTag)

@@ -363,7 +363,7 @@ addHeaderToBlockRequestQueue nodeId header continues = do
         addTaskToBlockRequestQueue nodeId queue $
             BlockRetrievalTask { brtHeader = header, brtContinues = continues }
     if added
-    then logDebug $ sformat ("Added headers to block request queue: nodeId="%build%
+    then logDebug $ sformat ("Added headers to block request queue: nodeId="%shown%
                              ", header="%build)
                             nodeId (headerHash header)
     else logWarning $ sformat ("Failed to add headers from "%build%
