@@ -179,6 +179,20 @@ instance Bi U where
 instance Arbitrary U where
     arbitrary = U <$> choose (0, 255) <*> arbitrary
 
+-- An `Address` is similar but different from the other types which must satisfy
+-- the extension property, because it doesn't have the tag as the first field but
+-- the CRC32.
+data UAddress = UAddress Word32 BS.ByteString deriving (Show, Eq)
+
+instance Bi UAddress where
+    encode (UAddress word32 bs) = encodeListLen 2 <> encode (word32 :: Word32) <> encode bs
+    decode = do
+        decodeListLenOf 2
+        UAddress <$> decode <*> decode
+
+instance Arbitrary UAddress where
+    arbitrary = UAddress <$> choose (0, maxBound) <*> arbitrary
+
 ----------------------------------------
 
 data X1 = X1 { x1A :: Int }
@@ -223,11 +237,13 @@ roundtripProperty (input :: a) = ((deserialize . serialize $ input) :: a) === in
 -- without breaking anything. This should work with every time which adopted
 -- the schema of having at least one constructor of the form:
 -- .... | Unknown Word8 ByteString
-extensionProperty :: (Arbitrary a, Eq a, Show a, Bi a) => Proxy a -> Property
-extensionProperty (Proxy :: Proxy a) = forAll (arbitrary :: Gen a) $ \input ->
-    let serialized      = serialize input -- We now have a BS blob
-        (u :: U)        = deserialize serialized
-        (encoded :: a)  = deserialize (serialize u)
+extensionProperty :: (Arbitrary a, Eq a, Show a, Bi a,
+                      Arbitrary container, Eq container, Show container, Bi container)
+                  => Proxy a -> Proxy container -> Property
+extensionProperty (Proxy :: Proxy a) (Proxy :: Proxy container) = forAll (arbitrary :: Gen a) $ \input ->
+    let serialized       = serialize input -- We now have a BS blob
+        (u :: container) = deserialize serialized
+        (encoded :: a)   = deserialize (serialize u)
     in encoded === input
 
 soundSerializationAttributesOfAsProperty
@@ -344,12 +360,12 @@ spec = describe "Cbor.Bi instances" $ do
                 prop "TinyVarInt" (soundInstanceProperty @TinyVarInt Proxy)
                 prop "Coeff" (soundInstanceProperty @Coeff Proxy)
                 prop "TxSizeLinear" (soundInstanceProperty @TxSizeLinear Proxy)
-                prop "TxFeePolicy" (soundInstanceProperty @TxFeePolicy Proxy .&&. extensionProperty @TxFeePolicy Proxy)
+                prop "TxFeePolicy" (soundInstanceProperty @TxFeePolicy Proxy .&&. extensionProperty @TxFeePolicy @U Proxy Proxy)
                 prop "Timestamp" (soundInstanceProperty @Timestamp Proxy)
                 prop "TimeDiff"  (soundInstanceProperty @TimeDiff Proxy)
                 prop "EpochIndex" (soundInstanceProperty @EpochIndex Proxy)
                 prop "Attributes" (soundInstanceProperty @(Attributes ()) Proxy)
-                prop "Address" (soundInstanceProperty @Address Proxy)
+                prop "Address" (soundInstanceProperty @Address Proxy .&&. extensionProperty @Address @UAddress Proxy Proxy)
                 prop "Coin" (soundInstanceProperty @Coin Proxy)
                 prop "CoinPortion" (soundInstanceProperty @CoinPortion Proxy)
                 prop "LocalSlotIndex" (soundInstanceProperty @LocalSlotIndex Proxy)
@@ -402,7 +418,7 @@ spec = describe "Cbor.Bi instances" $ do
                 prop "DHTKey" (soundInstanceProperty @DHTKey Proxy)
                 prop "DHTData" (soundInstanceProperty @DHTData Proxy)
                 prop "MessageCode" (soundInstanceProperty @MessageCode Proxy)
-                prop "HandlerSpec" (soundInstanceProperty @HandlerSpec Proxy .&&. extensionProperty @HandlerSpec Proxy)
+                prop "HandlerSpec" (soundInstanceProperty @HandlerSpec Proxy .&&. extensionProperty @HandlerSpec @U Proxy Proxy)
                 prop "VerInfo" (soundInstanceProperty @VerInfo Proxy)
                 prop "DlgPayload" (soundInstanceProperty @DlgPayload Proxy)
                 prop "EpochSlottingData" (soundInstanceProperty @EpochSlottingData Proxy)
@@ -451,7 +467,7 @@ spec = describe "Cbor.Bi instances" $ do
                 prop "TxOut" (soundInstanceProperty @TxOut Proxy)
                 modifyMaxSuccess (const 100) $
                     prop "DataMsg TxMsgContents" (soundInstanceProperty @(DataMsg TxMsgContents) Proxy)
-                prop "TxInWitness" (soundInstanceProperty @TxInWitness Proxy .&&. extensionProperty @TxInWitness Proxy)
+                prop "TxInWitness" (soundInstanceProperty @TxInWitness Proxy .&&. extensionProperty @TxInWitness @U Proxy Proxy)
                 prop "Signature a" (soundInstanceProperty @(Signature U) Proxy)
                 prop "Signed a"    (soundInstanceProperty @(Signed U) Proxy)
                 prop "RedeemSignature a"    (soundInstanceProperty @(RedeemSignature U) Proxy)
