@@ -47,15 +47,19 @@ instance Bi (Attributes AddrPkAttrs) where
 
 -- | Converts the `Address` (without the CRC32) into binary blob
 -- comprehensive of the serialised address and the tag.
+-- We prefix the serialised `Address` with the tag `24`, which is
+-- used to signal what follows next is a binary blob encoded using
+-- the CBOR format:
+-- Cfr. https://tools.ietf.org/html/rfc7049#section-2.4.4.1
 toTaggedAddress :: Address -> ByteString
 toTaggedAddress addr = serialize' tagAndBlob
     where
-      tagAndBlob :: (Word8, ByteString)
+      tagAndBlob :: (Word8, Word8, ByteString)
       tagAndBlob = case addr of
-          PubKeyAddress keyHash attrs -> (0, serialize' (keyHash, attrs))
-          ScriptAddress scrHash       -> (1, serialize' scrHash)
-          RedeemAddress keyHash       -> (2, serialize' keyHash)
-          UnknownAddressType t bs     -> (t, bs)
+          PubKeyAddress keyHash attrs -> (0, 24, serialize' (keyHash, attrs))
+          ScriptAddress scrHash       -> (1, 24, serialize' scrHash)
+          RedeemAddress keyHash       -> (2, 24, serialize' keyHash)
+          UnknownAddressType t bs     -> (t, 24, bs) -- Should an unknown Address blob take the 24 tag?
 
 instance Bi Address where
     encode addr =
@@ -78,8 +82,11 @@ decodeAddress taggedAddress = do
         Left e ->
             let failMsg = "decodeAddress failed when decoding " <> show taggedAddress <> ": " <> show e
             in fail failMsg
-        Right (t :: Word8, bs :: ByteString) -> pure $ case t of
-            0 -> uncurry PubKeyAddress $ deserialize' bs
-            1 -> ScriptAddress         $ deserialize' bs
-            2 -> RedeemAddress         $ deserialize' bs
-            _ -> UnknownAddressType t bs
+        Right (t :: Word8, semTag :: Word8, bs :: ByteString) -> do
+            if semTag /= 24
+              then fail $ "Tag 24 not found before deserialising an Address: " <> show semTag
+              else pure $ case t of
+                  0 -> uncurry PubKeyAddress $ deserialize' bs
+                  1 -> ScriptAddress         $ deserialize' bs
+                  2 -> RedeemAddress         $ deserialize' bs
+                  _ -> UnknownAddressType t bs
