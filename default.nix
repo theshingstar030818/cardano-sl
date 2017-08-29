@@ -53,6 +53,9 @@ let
       cardano-sl-tools = justStaticExecutables (overrideCabal super.cardano-sl-tools (drv: {
         # waiting on load-command size fix in dyld
         doCheck = ! pkgs.stdenv.isDarwin;
+        # We want to build the `cardano-post-mortem` tool when we are on Linux only,
+        # to make sure it won't bitrot.
+        configureFlags = optionals pkgs.stdenv.isLinux [ "-fwith-post-mortem" ];
       }));
 
       cardano-sl-static = justStaticExecutables self.cardano-sl;
