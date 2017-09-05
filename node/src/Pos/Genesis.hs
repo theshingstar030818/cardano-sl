@@ -327,7 +327,7 @@ devGenesisContext distr =
     hdwSize = 2 -- should be positive
     -- 20 ADA (20 millon coins) split among hdwSize users.
     -- Shouldn't mess with LRC after CSL-1502
-    hdwDistr = FlatBalances (fromIntegral hdwSize) (mkCoin 20000000)
+    hdwDistr = FlatBalances (fromIntegral hdwSize) (mkCoin 0)
     -- should be enough for testing.
     hdwAddresses = take hdwSize genesisDevHdwAccountAddresses
     genesisDevHdwAccountAddresses :: [Address]

@@ -12,7 +12,7 @@ import           Ether.Internal  (HasLens (..))
 import           Mockable        (Async, Concurrently, Delay, Mockables)
 import           System.Wlog     (WithLogger)
 
-import           Pos.Core        (HasCoreConstants)
+import           Pos.Core        (HasCoreConstants, GenesisWStakeholders)
 import           Pos.DB.Class    (MonadDB, MonadGState)
 import           Pos.Lrc.Context (LrcContext)
 
@@ -26,5 +26,6 @@ type LrcMode ssc ctx m
        , Mockables m [Async, Concurrently, Delay]
        , MonadReader ctx m
        , HasLens LrcContext ctx LrcContext
+       , HasLens GenesisWStakeholders ctx GenesisWStakeholders
        , HasCoreConstants
        )

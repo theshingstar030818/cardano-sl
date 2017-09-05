@@ -19,17 +19,18 @@ import           Data.Conduit               (runConduitRes, (.|))
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.HashSet               as HS
 import           Ether.Internal             (HasLens (..))
-import           Formatting                 (build, sformat, (%))
+import           Formatting                 (build, sformat, (%), shown)
 import           Mockable                   (forConcurrently)
 import           Serokell.Util.Exceptions   ()
 import           System.Wlog                (logDebug, logInfo, logWarning)
 
+import           Pos.Txp.Toil.Types         (utxoToStakes)
 import           Pos.Binary.Communication   ()
 import           Pos.Block.Logic.Internal   (BypassSecurityCheck (..), MonadBlockApply,
                                              applyBlocksUnsafe, rollbackBlocksUnsafe)
 import           Pos.Communication.Protocol (OutSpecs, WorkerSpec, localOnNewSlotWorker)
 import           Pos.Context                (recoveryCommGuard)
-import           Pos.Core                   (Coin, EpochIndex, EpochOrSlot (..),
+import           Pos.Core                   (Coin, EpochIndex, EpochOrSlot (..), GenesisWStakeholders,
                                              EpochOrSlot (..), SharedSeed, SlotId (..),
                                              StakeholderId, crucialSlot, epochIndexL,
                                              getEpochOrSlot, getSlotIndex,
@@ -230,9 +231,16 @@ issuersComputationDo epochId = do
         Just stake -> pure $ HM.insert id stake hm
 
 leadersComputationDo :: LrcMode ssc ctx m => EpochIndex -> SharedSeed -> m ()
-leadersComputationDo epochId seed =
+leadersComputationDo epochId seed = do
+    gws <- view (lensOf @GenesisWStakeholders)
+    utxo <- GS.getAllPotentiallyHugeUtxo
+    stakes <- GS.getAllPotentiallyHugeStakesMap
+    logWarning $ sformat ("FTS DBG (db utxo): "%shown) utxo
+    logWarning $ sformat ("FTS DBG (db stakes): "%shown) stakes
+    logWarning $ sformat ("FTS DBG (stakes from utxo): "%shown) (utxoToStakes gws utxo)
     unlessM (isJust <$> getLeaders epochId) $ do
         totalStake <- GS.getRealTotalStake
+        logWarning $ sformat ("FTS DBG (total stake): "%shown) totalStake
         leaders <- runConduitRes $ GS.stakeSource .| followTheSatoshiM seed totalStake
         putLeaders epochId leaders
 
