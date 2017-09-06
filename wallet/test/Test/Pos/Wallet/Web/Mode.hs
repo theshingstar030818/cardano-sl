@@ -14,9 +14,11 @@ import           Universum
 import           Control.Lens              (makeClassy, makeLensesWith)
 import qualified Data.Text.Buildable
 import           Formatting                (bprint, build, formatToString, (%))
+import qualified Prelude
 import           Test.QuickCheck           (Arbitrary (..))
 
 import           Pos.AllSecrets            (AllSecrets (..), HasAllSecrets (..))
+import           Pos.Core                  (HasCoreConstants)
 import           Pos.Util.Util             (postfixLFields)
 
 import           Pos.Wallet.Web.State      (WalletState, openMemState)
