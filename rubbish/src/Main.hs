@@ -94,17 +94,13 @@ import           Pos.Wallet                       (addSecretKey, getBalance,
                                                    getSecretKeys)
 import           Pos.WorkMode                     (RealMode, RealModeContext)
 
-import           Command                          (Command (..), ProposeUpdateSystem (..),
+import           Command                          (CmdCtx (..), Command (..),
+                                                   ProposeUpdateSystem (..),
                                                    SendMode (..), parseCommand)
 import           RubbishOptions                   (RubbishAction (..),
                                                    RubbishOptions (..), getRubbishOptions)
+import           Tx                               (sendToAllGenesis)
 
-
-data CmdCtx = CmdCtx
-    { skeys               :: [SecretKey]
-    , na                  :: [NodeId]
-    , genesisBalanceDistr :: BalanceDistribution
-    }
 
 helpMsg :: Text
 helpMsg = [text|
@@ -146,21 +142,6 @@ newtype LWalletException = LWalletException Text
 
 instance Exception LWalletException
 
--- | Count submitted and failed transactions.
---
--- This is used in the benchmarks using send-to-all-genesis
-data TxCount = TxCount
-    { _txcSubmitted :: !Int
-    , _txcFailed    :: !Int
-      -- How many threads are still sending transactions.
-    , _txcThreads   :: !Int }
-
-addTxSubmit :: Mockable SharedAtomic m => SharedAtomicT m TxCount -> m ()
-addTxSubmit mvar = modifySharedAtomic mvar (\(TxCount submitted failed sending) -> return (TxCount (submitted + 1) failed sending, ()))
-
-addTxFailed :: Mockable SharedAtomic m => SharedAtomicT m TxCount -> m ()
-addTxFailed mvar = modifySharedAtomic mvar (\(TxCount submitted failed sending) -> return (TxCount submitted (failed + 1) sending, ()))
-
 runCmd :: HasCoreConstants => SendActions LightWalletMode -> Command -> CmdCtx -> LightWalletMode ()
 runCmd _ (Balance addr) _ =
     getBalance addr >>=
@@ -179,87 +160,7 @@ runCmd sendActions (Send idx outputs) CmdCtx{na} = do
     case etx of
         Left err      -> putText $ sformat ("Error: "%stext) (toText $ displayException err)
         Right (tx, _) -> putText $ sformat ("Submitted transaction: "%txaF) tx
-runCmd sendActions (SendToAllGenesis duration conc delay_ sendMode tpsSentFile) CmdCtx{..} = do
-    let nNeighbours = length na
-    let slotDuration = fromIntegral (toMicroseconds genesisSlotDuration) `div` 1000000 :: Int
-        keysToSend = zip skeys (balanceDistribution genesisBalanceDistr)
-    tpsMVar <- newSharedAtomic $ TxCount 0 0 conc
-    startTime <- show . toInteger . getTimestamp . Timestamp <$> currentTime
-    Mockable.bracket (openFile tpsSentFile WriteMode) (liftIO . hClose) $ \h -> do
-        liftIO $ hSetBuffering h LineBuffering
-        liftIO . T.hPutStrLn h $ T.intercalate "," [ "slotDuration=" <> show slotDuration
-                                                   , "sendMode=" <> show sendMode
-                                                   , "conc=" <> show conc
-                                                   , "startTime=" <> startTime
-                                                   , "delay=" <> show delay_ ]
-        liftIO $ T.hPutStrLn h "time,txCount,txType"
-        txQueue <- atomically $ newTQueue
-        -- prepare a queue with all transactions
-        logInfo $ sformat ("Found "%shown%" keys in the genesis block.") (length keysToSend)
-        -- Light wallet doesn't know current slot, so let's assume
-        -- it's 0-th epoch. It's enough for our current needs.
-        forM_ (zip keysToSend [0..]) $ \((key, _balance), n) -> do
-            outAddr <- makePubKeyAddressRubbish (toPublic key)
-            let val1 = mkCoin 1
-                txOut1 = TxOut {
-                    txOutAddress = outAddr,
-                    txOutValue = val1
-                    }
-                txOuts = TxOutAux txOut1 :| []
-            neighbours <- case sendMode of
-                SendNeighbours -> return na
-                SendRoundRobin -> return [na !! (n `mod` nNeighbours)]
-                SendRandom -> do
-                    i <- liftIO $ randomRIO (0, nNeighbours - 1)
-                    return [na !! i]
-            atomically $ writeTQueue txQueue (key, txOuts, neighbours)
-
-            -- every <slotDuration> seconds, write the number of sent and failed transactions to a CSV file.
-        let writeTPS :: LightWalletMode ()
-            writeTPS = do
-                delay (sec slotDuration)
-                curTime <- show . toInteger . getTimestamp . Timestamp <$> currentTime
-                finished <- modifySharedAtomic tpsMVar $ \(TxCount submitted failed sending) -> do
-                    -- CSV is formatted like this:
-                    -- time,txCount,txType
-                    liftIO $ T.hPutStrLn h $ T.intercalate "," [curTime, show $ submitted, "submitted"]
-                    liftIO $ T.hPutStrLn h $ T.intercalate "," [curTime, show $ failed, "failed"]
-                    return (TxCount 0 0 sending, sending <= 0)
-                if finished
-                then logInfo "Finished writing TPS samples."
-                else writeTPS
-            -- Repeatedly take transactions from the queue and send them.
-            -- Do this n times.
-            sendTxs :: Int -> LightWalletMode ()
-            sendTxs n
-                | n <= 0 = do
-                      logInfo "All done sending transactions on this thread."
-                      modifySharedAtomic tpsMVar $ \(TxCount submitted failed sending) ->
-                          return (TxCount submitted failed (sending - 1), ())
-                | otherwise = (atomically $ tryReadTQueue txQueue) >>= \case
-                      Just (key, txOuts, neighbours) -> do
-                          utxo <- getOwnUtxoForPk $ safeToPublic (fakeSigner key)
-                          etx <- createTx utxo (fakeSigner key) txOuts (toPublic key)
-                          case etx of
-                              Left err -> do
-                                  addTxFailed tpsMVar
-                                  logError (sformat ("Error: "%build%" while trying to send to "%shown) err neighbours)
-                              Right (tx, _) -> do
-                                  res <- submitTxRaw (immediateConcurrentConversations sendActions neighbours) tx
-                                  addTxSubmit tpsMVar
-                                  logInfo $ if res
-                                      then sformat ("Submitted transaction: "%txaF%" to "%shown) tx neighbours
-                                      else sformat ("Applied transaction "%txaF%", however no neighbour applied it") tx
-                          delay $ ms delay_
-                          logInfo "Continuing to send transactions."
-                          sendTxs (n - 1)
-                      Nothing -> logInfo "No more transactions in the queue."
-            sendTxsConcurrently n = void $ forConcurrently [1..conc] (const (sendTxs n))
-        -- Send transactions while concurrently writing the TPS numbers every
-        -- slot duration. The 'writeTPS' action takes care to *always* write
-        -- after every slot duration, even if it is killed, so as to
-        -- guarantee that we don't miss any numbers.
-        void $ concurrently writeTPS (sendTxsConcurrently duration)
+runCmd sendActions (SendToAllGenesis stagp) ctx = sendToAllGenesis sendActions stagp ctx
 runCmd sendActions v@(Vote idx decision upid) CmdCtx{na} = do
     logDebug $ "Submitting a vote :" <> show v
     skey <- (!! idx) <$> getSecretKeys

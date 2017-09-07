@@ -17,6 +17,7 @@ executable cardano-rubbish
   other-modules:
                        Command
                        RubbishOptions
+                       Tx
 
                        Pos.Rubbish
                        Pos.Rubbish.Hacks
