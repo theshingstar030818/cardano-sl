@@ -24,6 +24,7 @@ import           Control.Concurrent.Async (race_)
 import qualified Brick as B
 import qualified Brick.AttrMap as B
 import qualified Brick.BChan as B
+import qualified Brick.Widgets.Core as B
 import qualified Brick.Widgets.Center as B
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Border.Style as B
@@ -122,7 +123,8 @@ brickAction eventChan = void $
   where
       app :: BApp
       app = B.App
-          { B.appDraw = \s -> [ui (s ^. asLog_L)]
+          { B.appDraw = \s ->
+                  [logsWidget (s ^. asLog_L)]
           , B.appChooseCursor = \_ _ -> Nothing
           , B.appHandleEvent = onEvent
           , B.appStartEvent = return
@@ -138,8 +140,8 @@ brickAction eventChan = void $
           AppEventLog logEv -> B.continue $ s & asLog_L %~ (logEv:)
       onEvent s _ = B.continue s
 
-ui :: [LogEvent] -> B.Widget ()
-ui logEvents =
-    B.withBorderStyle B.unicode $
-    B.borderWithLabel (B.str "Cardano SL") $
-    B.center (B.str (maybe "No Logs" show (listToMaybe logEvents))) B.<+> B.vBorder B.<+> B.center (B.str "Right")
+logsWidget :: [LogEvent] -> B.Widget ()
+logsWidget logEvents = B.vBox (renderLogEvent <$> take 100 logEvents)
+
+renderLogEvent :: LogEvent -> B.Widget ()
+renderLogEvent (LogEvent _lgname _sev msg) = B.txtWrap msg

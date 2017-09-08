@@ -111,6 +111,8 @@ extra-deps:
 - cborg-0.1.1.0
 - systemd-1.1.2
 - tabl-1.0.3
+- brick-0.24.2
+- word-wrap-0.4.1
 
 # This is for CI to pass --fast to all dependencies
 apply-ghc-options: everything
