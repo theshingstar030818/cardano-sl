@@ -15,7 +15,9 @@ import           Pos.Launcher.Runner        (runRealMode)
 import           Pos.Launcher.Scenario      (runNode)
 import           Pos.Ssc.Class              (SscConstraint)
 import           Pos.Ssc.Class.Types        (SscParams)
-import           Pos.WorkMode               (RealMode)
+import           Pos.WorkMode               (RealMode, LogAction)
+import           Pos.Util.Util              (powerLift)
+import           Pos.Util.LogAction         (hoistLogAction)
 
 -----------------------------------------------------------------------------
 -- Main launchers
@@ -26,14 +28,16 @@ runNodeReal
     :: forall ssc.
        ( SscConstraint ssc
        , HasCoreConstants)
-    => NodeParams
+    => LogAction Production
+    -> NodeParams
     -> SscParams ssc
     -> ([WorkerSpec (RealMode ssc)], OutSpecs)
     -> Production ()
-runNodeReal np sscnp plugins = bracketNodeResources np sscnp action
+runNodeReal logAction np sscnp plugins = bracketNodeResources logAction np sscnp action
   where
     action :: HasCoreConstants => NodeResources ssc (RealMode ssc) -> Production ()
     action nr@NodeResources {..} =
         runRealMode
+            (hoistLogAction powerLift logAction)
             nr
             (runNode @ssc nr plugins)

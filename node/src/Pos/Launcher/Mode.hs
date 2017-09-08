@@ -31,6 +31,7 @@ import qualified Control.Monad.Reader  as Mtl
 import           Ether.Internal        (HasLens (..))
 import           Mockable.Production   (Production)
 import           System.IO.Unsafe      (unsafeInterleaveIO)
+import           System.Wlog           (CanLog(..))
 
 import           Pos.Block.Core        (Block, BlockHeader)
 import           Pos.Block.Types       (Undo)
@@ -57,6 +58,7 @@ import           Pos.Slotting.MemState (MonadSlotsData)
 import           Pos.Ssc.Class.Helpers (SscHelpersClass)
 import           Pos.Ssc.Class.Types   (SscBlock)
 import           Pos.Util              (Some (..))
+import           Pos.Util.LogAction    (LogAction(..))
 import           Pos.Util.Util         (postfixLFields)
 
 
@@ -94,11 +96,12 @@ data InitModeContext ssc = InitModeContext
     , imcSlottingVar        :: (Timestamp, TVar SlottingData)
     , imcSlottingContextSum :: SlottingContextSum
     , imcLrcContext         :: LrcContext
+    , imcLogAction          :: !(LogAction (InitMode ssc))
     }
 
-makeLensesWith postfixLFields ''InitModeContext
-
 type InitMode ssc = Mtl.ReaderT (InitModeContext ssc) Production
+
+makeLensesWith postfixLFields ''InitModeContext
 
 runInitMode :: InitModeContext ssc -> InitMode ssc a -> Production a
 runInitMode = flip Mtl.runReaderT
@@ -162,3 +165,7 @@ instance (HasCoreConstants, MonadSlotsData ctx (InitMode ssc)) =>
     getCurrentSlotInaccurate = getCurrentSlotInaccurateSum
     currentTimeSlotting      = currentTimeSlottingSum
 
+instance {-# OVERLAPPING #-} CanLog (InitMode ssc) where
+    dispatchMessage lgname sev msg = do
+        LogAction act <- view imcLogAction_L
+        act lgname sev msg

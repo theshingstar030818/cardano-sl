@@ -9,6 +9,9 @@ module Pos.WorkMode
 
        , TxpExtra_TMP
 
+       , LogAction(..)
+       , defaultLogAction
+
        -- * Actual modes
        , RealMode
        , RealModeContext(..)
@@ -23,7 +26,7 @@ import           Control.Lens           (makeLensesWith)
 import qualified Control.Monad.Reader   as Mtl
 import           Ether.Internal         (HasLens (..))
 import           Mockable               (Production)
-import           System.Wlog            (HasLoggerName (..), LoggerName)
+import           System.Wlog            (HasLoggerName (..), CanLog(..), LoggerName)
 
 import           Pos.Block.BListener    (MonadBListener (..), onApplyBlocksStub,
                                          onRollbackBlocksStub)
@@ -67,9 +70,9 @@ import           Pos.Util.OutboundQueue (EnqueuedConversation (..), OQ)
 import qualified Pos.Util.OutboundQueue as OQ.Reader
 import           Pos.Util.TimeWarp      (CanJsonLog (..))
 import           Pos.Util.UserSecret    (HasUserSecret (..))
+import           Pos.Util.LogAction     (LogAction(..), defaultLogAction)
 import           Pos.Util.Util          (postfixLFields)
 import           Pos.WorkMode.Class     (MinWorkMode, TxpExtra_TMP, WorkMode)
-
 
 data RealModeContext ssc = RealModeContext
     { rmcNodeDBs       :: !NodeDBs
@@ -78,6 +81,7 @@ data RealModeContext ssc = RealModeContext
     , rmcDelegationVar :: !DelegationVar
     , rmcJsonLogConfig :: !JsonLogConfig
     , rmcLoggerName    :: !LoggerName
+    , rmcLogAction     :: !(LogAction (RealMode ssc))
     , rmcNodeContext   :: !(NodeContext ssc)
     , rmcOutboundQ     :: !(OQ (RealMode ssc))
     }
@@ -144,6 +148,11 @@ instance {-# OVERLAPPING #-} HasLoggerName (RealMode ssc) where
 
 instance {-# OVERLAPPING #-} CanJsonLog (RealMode ssc) where
     jsonLog = jsonLogDefault
+
+instance {-# OVERLAPPING #-} CanLog (RealMode ssc) where
+    dispatchMessage lgname sev msg = do
+        LogAction act <- view rmcLogAction_L
+        act lgname sev msg
 
 instance (HasCoreConstants, MonadSlotsData ctx (RealMode ssc))
       => MonadSlots ctx (RealMode ssc)

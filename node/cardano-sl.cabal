@@ -113,6 +113,7 @@ library
                         -- Utilities/helpers
                         Pos.Util
                         Pos.Util.LoggerName
+                        Pos.Util.LogAction
                         Pos.Util.Monitor
                         Pos.Util.Undefined
                         Pos.Util.BackupPhrase
@@ -510,6 +511,78 @@ executable cardano-node-simple
                      , time
                      , time-units
                      , universum >= 0.1.11
+  default-language:    Haskell2010
+  ghc-options:         -threaded -rtsopts
+                       -Wall
+                       -fno-warn-orphans
+                       -O2
+
+  -- linker speed up for linux
+  if os(linux)
+    ghc-options:       -optl-fuse-ld=gold
+    ld-options:        -fuse-ld=gold
+
+  default-extensions:   DeriveDataTypeable
+                        DeriveGeneric
+                        GeneralizedNewtypeDeriving
+                        StandaloneDeriving
+                        FlexibleContexts
+                        FlexibleInstances
+                        MultiParamTypeClasses
+                        FunctionalDependencies
+                        DefaultSignatures
+                        NoImplicitPrelude
+                        OverloadedStrings
+                        RecordWildCards
+                        TypeApplications
+                        TupleSections
+                        ViewPatterns
+                        LambdaCase
+                        MultiWayIf
+                        ConstraintKinds
+                        UndecidableInstances
+                        BangPatterns
+                        TemplateHaskell
+                        ScopedTypeVariables
+
+  build-tools: cpphs >= 1.19
+  ghc-options: -pgmP cpphs -optP --cpp
+
+executable cardano-node-cli
+  hs-source-dirs:      src/node-cli
+  main-is:             Main.hs
+  build-depends:       base
+                     , binary
+                     , bytestring
+                     , cardano-sl-core
+                     , cardano-sl-infra
+                     , cardano-sl-lrc
+                     , cardano-sl-update
+                     , cardano-sl-ssc
+                     , cardano-sl
+                     , containers
+                     , data-default
+                     , directory
+                     , ether
+                     , filepath
+                     , formatting
+                     , lens
+                     , log-warper
+                     , mtl
+                     , neat-interpolation
+                     , network-transport
+                     , node-sketch
+                     , network-transport-tcp
+                     , optparse-applicative
+                     , parsec
+                     , serokell-util >= 0.1.3.4
+                     , stm-containers
+                     , time
+                     , time-units
+                     , universum >= 0.1.11
+                     , brick
+                     , vty
+                     , async
   default-language:    Haskell2010
   ghc-options:         -threaded -rtsopts
                        -Wall

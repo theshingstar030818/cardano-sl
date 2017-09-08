@@ -43,7 +43,7 @@ import           Pos.Ssc.Class         (SscConstraint)
 import           Pos.StateLock         (StateLock (..))
 import           Pos.Util              (inAssertMode)
 import           Pos.Util.Config       (configName)
-import           Pos.Util.LogSafe      (logInfoS)
+-- import           Pos.Util.LogSafe      (logInfoS)
 import           Pos.Worker            (allWorkers)
 import           Pos.WorkMode.Class    (WorkMode)
 
@@ -72,9 +72,12 @@ runNode' NodeResources {..} workers' plugins' = ActionSpec $ \vI sendActions -> 
     nodeStartMsg
     inAssertMode $ logInfo "Assert mode on"
     pk <- getOurPublicKey
-    let pkHash = addressHash pk
+    let _pkHash = addressHash pk
+    {- Commented because 'logInfoS' bypasses 'CanLog' and breaks 'vty'. We can't switch
+       to 'logInfo' here because the public key would show up in the log file.
     logInfoS $ sformat ("My public key is: "%build%", pk hash: "%build)
         pk pkHash
+    -}
 
     -- Synchronously join the Kademlia network before doing any more.
     --

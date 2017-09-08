@@ -28,7 +28,7 @@ import           Pos.Ssc.NistBeacon  (SscNistBeacon)
 import           Pos.Ssc.SscAlgo     (SscAlgo (..))
 import           Pos.Update          (updateTriggerWorker)
 import           Pos.Util.UserSecret (usVss)
-import           Pos.WorkMode        (RealMode)
+import           Pos.WorkMode        (RealMode, defaultLogAction)
 
 actionWithoutWallet
     :: forall ssc.
@@ -38,7 +38,7 @@ actionWithoutWallet
     -> NodeParams
     -> Production ()
 actionWithoutWallet sscParams nodeParams =
-    runNodeReal @ssc nodeParams sscParams plugins
+    runNodeReal @ssc defaultLogAction nodeParams sscParams plugins
   where
     plugins :: ([WorkerSpec (RealMode ssc)], OutSpecs)
     plugins = updateTriggerWorker

@@ -20,7 +20,7 @@ module Pos.Launcher.Resource
        , bracketTransport
        ) where
 
-import           Universum                  hiding (bracket, finally)
+import           Universum                  hiding (bracket, finally, log)
 
 import           Control.Concurrent.STM     (newEmptyTMVarIO, newTBQueueIO)
 import           Data.Tagged                (untag)
@@ -65,6 +65,8 @@ import           Pos.Ssc.Class              (SscConstraint, SscParams,
                                              sscCreateNodeContext)
 import           Pos.Ssc.Extra              (SscState, mkSscState)
 import           Pos.StateLock              (newStateLock)
+import           Pos.Util.Util              (powerLift)
+import           Pos.Util.LogAction         (hoistLogAction)
 import           Pos.Txp                    (GenericTxpLocalData (..), mkTxpLocalData,
                                              recordTxpMetrics)
 #ifdef WITH_EXPLORER
@@ -77,7 +79,7 @@ import           Pos.Launcher.Mode          (InitMode, InitModeContext (..),
                                              newInitFuture, runInitMode)
 import           Pos.Update.Context         (mkUpdateContext)
 import qualified Pos.Update.DB              as GState
-import           Pos.WorkMode               (TxpExtra_TMP)
+import           Pos.WorkMode               (TxpExtra_TMP, LogAction(..))
 
 #ifdef linux_HOST_OS
 import qualified System.Systemd.Daemon      as Systemd
@@ -122,12 +124,13 @@ allocateNodeResources
        ( SscConstraint ssc
        , HasCoreConstants
        )
-    => Transport m
+    => LogAction Production
+    -> Transport m
     -> NetworkConfig KademliaDHTInstance
     -> NodeParams
     -> SscParams ssc
     -> Production (NodeResources ssc m)
-allocateNodeResources transport networkConfig np@NodeParams {..} sscnp = do
+allocateNodeResources logAction transport networkConfig np@NodeParams {..} sscnp = do
     db <- openNodeDBs npRebuildDb npDbPathM
     (futureLrcContext, putLrcContext) <- newInitFuture
     (futureSlottingVar, putSlottingVar) <- newInitFuture
@@ -141,6 +144,7 @@ allocateNodeResources transport networkConfig np@NodeParams {..} sscnp = do
             futureSlottingVar
             futureSlottingContext
             futureLrcContext
+            (hoistLogAction powerLift logAction)
     runInitMode initModeContext $ do
         initNodeDBs @ssc
 
@@ -196,15 +200,16 @@ bracketNodeResources :: forall ssc m a.
       , MonadIO m
       , HasCoreConstants
       )
-    => NodeParams
+    => LogAction Production
+    -> NodeParams
     -> SscParams ssc
     -> (HasCoreConstants => NodeResources ssc m -> Production a)
     -> Production a
-bracketNodeResources np sp k = bracketTransport tcpAddr $ \transport ->
+bracketNodeResources logAction np sp k = bracketTransport tcpAddr $ \transport ->
     bracketKademlia (npBaseParams np) (npNetworkConfig np) $ \networkConfig ->
-        bracket (allocateNodeResources transport networkConfig np sp) releaseNodeResources $ \nodeRes ->do
+        bracket (allocateNodeResources logAction transport networkConfig np sp) releaseNodeResources $ \nodeRes ->do
             -- Notify systemd we are fully operative
-            notifyReady
+            notifyReady logAction
             k nodeRes
   where
     tcpAddr = tpTcpAddr (npTransport np)
@@ -411,13 +416,13 @@ bracketTransport tcpAddr k =
 -- | Notify process manager tools like systemd the node is ready.
 -- Available only on Linux for systems where `libsystemd-dev` is installed.
 -- It defaults to a noop for all the other platforms.
-notifyReady :: (MonadIO m, WithLogger m) => m ()
+notifyReady :: MonadIO m => LogAction m -> m ()
 #ifdef linux_HOST_OS
-notifyReady = do
+notifyReady (LogAction log) = do
     res <- liftIO Systemd.notifyReady
     case res of
         Just () -> return ()
-        Nothing -> Logger.logWarning "notifyReady failed to notify systemd."
+        Nothing -> log "" Logger.Warning "notifyReady failed to notify systemd."
 #else
 notifyReady = return ()
 #endif

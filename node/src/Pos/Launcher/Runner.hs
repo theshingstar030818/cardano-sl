@@ -60,7 +60,7 @@ import           Pos.Statistics                  (EkgParams (..), StatsdParams (
 import           Pos.Util.JsonLog                (JsonLogConfig (..),
                                                   jsonLogConfigFromHandle)
 import           Pos.WorkMode                    (EnqueuedConversation (..), OQ, RealMode,
-                                                  RealModeContext (..), WorkMode)
+                                                  RealModeContext (..), WorkMode, LogAction)
 
 ----------------------------------------------------------------------------
 -- High level runners
@@ -70,7 +70,8 @@ import           Pos.WorkMode                    (EnqueuedConversation (..), OQ,
 runRealMode
     :: forall ssc a.
        (HasCoreConstants, SscConstraint ssc)
-    => NodeResources ssc (RealMode ssc)
+    => LogAction (RealMode ssc)
+    -> NodeResources ssc (RealMode ssc)
     -> (ActionSpec (RealMode ssc) a, OutSpecs)
     -> Production a
 runRealMode = runRealBasedMode identity identity
@@ -81,11 +82,12 @@ runRealBasedMode
        (SscConstraint ssc, WorkMode ssc ctx m)
     => (forall b. m b -> RealMode ssc b)
     -> (forall b. RealMode ssc b -> m b)
+    -> LogAction (RealMode ssc)
     -> NodeResources ssc m
     -> (ActionSpec m a, OutSpecs)
     -> Production a
-runRealBasedMode unwrap wrap nr@NodeResources {..} (ActionSpec action, outSpecs) =
-    runRealModeDo (hoistNodeResources unwrap nr) outSpecs $
+runRealBasedMode unwrap wrap logAction nr@NodeResources {..} (ActionSpec action, outSpecs) =
+    runRealModeDo logAction (hoistNodeResources unwrap nr) outSpecs $
     ActionSpec $ \vI sendActions ->
         unwrap . action vI $ hoistSendActions wrap unwrap sendActions
 
@@ -93,11 +95,12 @@ runRealBasedMode unwrap wrap nr@NodeResources {..} (ActionSpec action, outSpecs)
 runRealModeDo
     :: forall ssc a.
        (HasCoreConstants, SscConstraint ssc)
-    => NodeResources ssc (RealMode ssc)
+    => LogAction (RealMode ssc)
+    -> NodeResources ssc (RealMode ssc)
     -> OutSpecs
     -> ActionSpec (RealMode ssc) a
     -> Production a
-runRealModeDo NodeResources {..} outSpecs action =
+runRealModeDo logAction NodeResources {..} outSpecs action =
     do
         jsonLogConfig <- maybe
             (pure JsonLogDisabled)
@@ -162,6 +165,7 @@ runRealModeDo NodeResources {..} outSpecs action =
             nrDlgState
             jlConf
             lpRunnerTag
+            logAction
             nrContext
             oq
 
