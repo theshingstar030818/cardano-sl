@@ -20,7 +20,7 @@ module Pos.Launcher.Resource
        , bracketTransport
        ) where
 
-import           Universum                  hiding (bracket, finally)
+import           Universum                  hiding (bracket)
 
 import           Control.Concurrent.STM     (newEmptyTMVarIO, newTBQueueIO)
 import           Data.Tagged                (untag)
@@ -54,8 +54,9 @@ import           Pos.DB.Rocks               (closeNodeDBs, openNodeDBs)
 import           Pos.Delegation             (DelegationVar, mkDelegationVar)
 import           Pos.DHT.Real               (KademliaDHTInstance, KademliaParams (..),
                                              startDHTInstance, stopDHTInstance)
+import qualified Pos.GState                 as GS
 import           Pos.Launcher.Param         (BaseParams (..), LoggingParams (..),
-                                             NodeParams (..), TransportParams (..))
+                                             NodeParams (..))
 import           Pos.Lrc.Context            (LrcContext (..), mkLrcSyncData)
 import           Pos.Network.Types          (NetworkConfig (..), Topology (..))
 import           Pos.Shutdown.Types         (ShutdownContext (..))
@@ -65,8 +66,8 @@ import           Pos.Ssc.Class              (SscConstraint, SscParams,
                                              sscCreateNodeContext)
 import           Pos.Ssc.Extra              (SscState, mkSscState)
 import           Pos.StateLock              (newStateLock)
-import           Pos.Txp                    (GenericTxpLocalData, TxpMetrics,
-                                             mkTxpLocalData, recordTxpMetrics)
+import           Pos.Txp                    (GenericTxpLocalData (..), mkTxpLocalData,
+                                             recordTxpMetrics)
 #ifdef WITH_EXPLORER
 import           Pos.Explorer               (explorerTxpGlobalSettings)
 #else
@@ -96,7 +97,7 @@ data NodeResources ssc m = NodeResources
     { nrContext    :: !(NodeContext ssc)
     , nrDBs        :: !NodeDBs
     , nrSscState   :: !(SscState ssc)
-    , nrTxpState   :: !(GenericTxpLocalData TxpExtra_TMP, TxpMetrics)
+    , nrTxpState   :: !(GenericTxpLocalData TxpExtra_TMP)
     , nrDlgState   :: !DelegationVar
     , nrTransport  :: !(Transport m)
     , nrJLogHandle :: !(Maybe Handle)
@@ -146,11 +147,20 @@ allocateNodeResources transport networkConfig np@NodeParams {..} sscnp = do
 
         nrEkgStore <- liftIO $ Metrics.newStore
 
-        ctx@NodeContext {..} <- allocateNodeContext np sscnp putSlotting networkConfig nrEkgStore
+        txpVar <- mkTxpLocalData -- doesn't use slotting or LRC
+        let ancd =
+                AllocateNodeContextData
+                { ancdNodeParams = np
+                , ancdSscParams = sscnp
+                , ancdPutSlotting = putSlotting
+                , ancdNetworkCfg = networkConfig
+                , ancdEkgStore = nrEkgStore
+                , ancdTxpMemState = txpVar
+                }
+        ctx@NodeContext {..} <- allocateNodeContext ancd
         putLrcContext ncLrcContext
         setupLoggers $ bpLoggingParams npBaseParams
         dlgVar <- mkDelegationVar @ssc
-        txpVar <- mkTxpLocalData
         sscState <- mkSscState @ssc
         let nrTransport = transport
         nrJLogHandle <-
@@ -161,13 +171,11 @@ allocateNodeResources transport networkConfig np@NodeParams {..} sscnp = do
                     liftIO $ hSetBuffering h NoBuffering
                     return $ Just h
 
-        txpMetrics <- liftIO $ recordTxpMetrics nrEkgStore
-
         return NodeResources
             { nrContext = ctx
             , nrDBs = db
             , nrSscState = sscState
-            , nrTxpState = (txpVar, txpMetrics)
+            , nrTxpState = txpVar
             , nrDlgState = dlgVar
             , ..
             }
@@ -193,14 +201,14 @@ bracketNodeResources :: forall ssc m a.
     -> SscParams ssc
     -> (HasCoreConstants => NodeResources ssc m -> Production a)
     -> Production a
-bracketNodeResources np sp k = bracketTransport tcpAddr $ \transport ->
-    bracketKademlia (npBaseParams np) (npNetworkConfig np) $ \networkConfig ->
-        bracket (allocateNodeResources transport networkConfig np sp) releaseNodeResources $ \nodeRes ->do
-            -- Notify systemd we are fully operative
-            notifyReady
-            k nodeRes
-  where
-    tcpAddr = tpTcpAddr (npTransport np)
+bracketNodeResources np sp k =
+    bracketTransport (ncTcpAddr (npNetworkConfig np)) $ \transport ->
+        bracketKademlia (npBaseParams np) (npNetworkConfig np) $ \networkConfig ->
+            bracket (allocateNodeResources transport networkConfig np sp)
+                    releaseNodeResources $ \nodeRes ->do
+                -- Notify systemd we are fully operative
+                notifyReady
+                k nodeRes
 
 ----------------------------------------------------------------------------
 -- Logging
@@ -225,18 +233,31 @@ loggerBracket lp = bracket_ (setupLoggers lp) releaseAllHandlers
 -- NodeContext
 ----------------------------------------------------------------------------
 
+data AllocateNodeContextData ssc = AllocateNodeContextData
+    { ancdNodeParams :: !NodeParams
+    , ancdSscParams :: !(SscParams ssc)
+    , ancdPutSlotting :: (Timestamp, TVar SlottingData) -> SlottingContextSum -> InitMode ssc ()
+    , ancdNetworkCfg :: NetworkConfig KademliaDHTInstance
+    , ancdEkgStore :: !Metrics.Store
+    , ancdTxpMemState :: !(GenericTxpLocalData TxpExtra_TMP)
+    }
+
 allocateNodeContext
     :: forall ssc .
       (HasCoreConstants, SscConstraint ssc)
-    => NodeParams
-    -> SscParams ssc
-    -> ((Timestamp, TVar SlottingData) -> SlottingContextSum -> InitMode ssc ())
-    -> NetworkConfig KademliaDHTInstance
-    -> Metrics.Store
+    => AllocateNodeContextData ssc
     -> InitMode ssc (NodeContext ssc)
-allocateNodeContext np@NodeParams {..} sscnp putSlotting networkConfig store = do
+allocateNodeContext ancd = do
+    let AllocateNodeContextData { ancdNodeParams = np@NodeParams {..}
+                                , ancdSscParams = sscnp
+                                , ancdPutSlotting = putSlotting
+                                , ancdNetworkCfg = networkConfig
+                                , ancdEkgStore = store
+                                , ancdTxpMemState = TxpLocalData {..}
+                                } = ancd
     ncLoggerConfig <- getRealLoggerConfig $ bpLoggingParams npBaseParams
-    ncStateLock <- newStateLock
+    ncStateLock <- newStateLock =<< GS.getTip
+    ncStateLockMetrics <- liftIO $ recordTxpMetrics store txpMemPool
     lcLrcSync <- mkLrcSyncData >>= newTVarIO
     ncSlottingVar <- (npSystemStart,) <$> mkSlottingVar
     ncSlottingContext <-
@@ -257,11 +278,11 @@ allocateNodeContext np@NodeParams {..} sscnp putSlotting networkConfig store = d
     -- TODO synchronize the NodeContext peers var with whatever system
     -- populates it.
     peersVar <- newTVarIO mempty
-    let ctx shutdownQueue =
+    let ctx =
             NodeContext
             { ncConnectedPeers = ConnectedPeers peersVar
             , ncLrcContext = LrcContext {..}
-            , ncShutdownContext = ShutdownContext ncShutdownFlag shutdownQueue
+            , ncShutdownContext = ShutdownContext ncShutdownFlag
             , ncNodeParams = np
 #ifdef WITH_EXPLORER
             , ncTxpGlobalSettings = explorerTxpGlobalSettings
@@ -271,8 +292,7 @@ allocateNodeContext np@NodeParams {..} sscnp putSlotting networkConfig store = d
             , ncNetworkConfig = networkConfig
             , ..
             }
-    -- TODO bounded queue not necessary.
-    ctx <$> liftIO (newTBQueueIO maxBound)
+    return ctx
 
 releaseNodeContext :: forall ssc m . MonadIO m => NodeContext ssc -> m ()
 releaseNodeContext _ = return ()
@@ -339,8 +359,8 @@ bracketKademlia bp nc@NetworkConfig {..} action = case ncTopology of
         k $ TopologyCore{topologyOptKademlia = Nothing, ..}
     TopologyBehindNAT{..} ->
         k $ TopologyBehindNAT{..}
-    TopologyLightWallet{..} ->
-        k $ TopologyLightWallet{..}
+    TopologyAuxx{..} ->
+        k $ TopologyAuxx{..}
   where
     k topology = action (nc { ncTopology = topology })
 

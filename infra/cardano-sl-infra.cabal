@@ -1,5 +1,5 @@
 name:                cardano-sl-infra
-version:             0.5.1
+version:             0.6.0
 synopsis:            Cardano SL - infrastructural
 description:         Cardano SL - infrastructural
 license:             MIT
@@ -23,6 +23,9 @@ library
                         Pos.Reporting.MemState
                         Pos.Reporting.Methods
                         Pos.Reporting.Metrics
+
+                        -- StateLock
+                        Pos.StateLock
 
                         -- Slotting
                         Pos.Slotting
