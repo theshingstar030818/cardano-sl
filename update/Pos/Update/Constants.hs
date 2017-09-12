@@ -24,6 +24,7 @@ import           System.Environment         (lookupEnv)
 
 import           Pos.Core                   (ApplicationName, BlockVersion (..),
                                              SoftwareVersion (..), mkApplicationName)
+import           Pos.Core.Constants         (isDevelopment)
 import           Pos.Update.Core            (SystemTag, mkSystemTag)
 import           Pos.Util.Config            (IsConfig (..), configParser,
                                              parseFromCslConfig)
@@ -88,16 +89,15 @@ curSoftwareVersion = SoftwareVersion ourAppName
                                      (ccApplicationVersion updateConstants)
 
 ourSystemTag :: SystemTag
-ourSystemTag =
-    $(do mbTag <- runIO (lookupEnv "CSL_SYSTEM_TAG")
-         case mbTag of
-             Just tag -> lift =<< mkSystemTag (toText tag)
-             Nothing ->
-                 fail $
-                 "Failed to init ourSystemTag: \
-                       \couldn't find env var \"CSL_SYSTEM_TAG\". " <>
-                 "If you have no idea what it means, just set " <>
-                 "\"CSL_SYSTEM_TAG\" environmental variable (to arbitrary value)")
+ourSystemTag = $(do
+    mbTag <- runIO (lookupEnv "CSL_SYSTEM_TAG")
+    case mbTag of
+        Just tag -> lift =<< mkSystemTag (toText tag)
+        Nothing
+            | isDevelopment -> lift =<< mkSystemTag "linux64"
+            | otherwise ->
+                  fail "Failed to init ourSystemTag: \
+                       \couldn't find env var \"CSL_SYSTEM_TAG\"")
 
 ----------------------------------------------------------------------------
 -- Genesis constants
