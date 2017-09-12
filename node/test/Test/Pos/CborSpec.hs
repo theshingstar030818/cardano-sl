@@ -39,7 +39,7 @@ import           Pos.Binary.Crypto                 ()
 import           Pos.Binary.GodTossing             ()
 import           Pos.Binary.Infra                  ()
 import           Pos.Binary.Relay                  ()
-import           Pos.Core.Context                  (giveStaticConsts)
+import           Pos.Core.Genesis                  (giveStaticConsts)
 import           Pos.Core.Types                    (ScriptVersion)
 import           Pos.Data.Attributes               (Attributes (..), decodeAttributes,
                                                     encodeAttributes)

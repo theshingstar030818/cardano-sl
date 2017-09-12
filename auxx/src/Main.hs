@@ -12,7 +12,8 @@ import           System.Wlog           (logInfo)
 
 import qualified Pos.Client.CLI        as CLI
 import           Pos.Core              (Timestamp (..))
-import           Pos.Core.Context      (HasCoreConstants, giveStaticConsts)
+import           Pos.Core.Context      (HasCoreConstants)
+import           Pos.Core.Genesis      (giveStaticConsts)
 import           Pos.Launcher          (NodeParams (..), bracketNodeResources,
                                         runRealBasedMode)
 import           Pos.Network.Types     (NetworkConfig (..), Topology (..),

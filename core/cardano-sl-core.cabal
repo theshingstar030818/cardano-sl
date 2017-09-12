@@ -113,8 +113,6 @@ library
                        Pos.Util.Util
 
   other-modules:
-                       Pos.Core.Constants.Raw
-                       Pos.Core.Constants.Typed
                        Pos.Core.Context.Const
                        Pos.Core.Context.PrimaryKey
 
@@ -161,6 +159,7 @@ library
                      , reflection
                      , resourcet
                      , safecopy
+                     , scientific
                      , semigroups
                      , serokell-util
                      , stm

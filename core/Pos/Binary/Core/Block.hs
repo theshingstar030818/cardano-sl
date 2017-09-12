@@ -8,7 +8,7 @@ import           Universum
 
 import           Pos.Binary.Class   (Bi (..), encodeListLen, enforceSize)
 import qualified Pos.Core.Block     as T
-import           Pos.Core.Constants (protocolMagic)
+import           Pos.Core.Genesis   (protocolMagic)
 import qualified Pos.Core.Types     as T
 import           Pos.Util.Util      (eitherToFail)
 

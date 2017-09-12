@@ -18,8 +18,8 @@ import           Test.QuickCheck       (Arbitrary (..), Gen, Property, choose, c
 import           Pos.Core              (EpochIndex (..), EpochOrSlot (..), SlotId,
                                         SlotId (..), VssCertificate (..), getCertId,
                                         mkVssCertificate)
-import           Pos.Core.Context      (HasCoreConstants, giveStaticConsts,
-                                        slotSecurityParam)
+import           Pos.Core.Context      (HasCoreConstants, slotSecurityParam)
+import           Pos.Core.Genesis      (giveStaticConsts)
 import           Pos.Core.Slotting     (flattenEpochOrSlot, unflattenSlotId)
 import           Pos.Ssc.GodTossing    (GtGlobalState (..), VssCertData (..), delete,
                                         empty, expiryEoS, filter, gsVssCertificates,

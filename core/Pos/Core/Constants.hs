@@ -1,5 +1,211 @@
--- | Constants that the rest of the code needs to know. They're
--- available from this module directly, instead of being passed as a
--- config. Also some constants aren't configurable.
+{-# LANGUAGE CPP #-}
 
-{-# OPTIONS_GHC -F -pgmF autoexporter #-}
+-- | Raw constants which we want to have in 'core'. They have simpler
+-- types than constants from 'Typed' module. It's done to avoid cyclic
+-- dependencies. To be more precise, this module doesn't import
+-- 'Pos.Core.Types', while 'Typed' module does.
+
+module Pos.Core.Constants
+       (
+       -- * Non-configurable constants
+         sharedSeedLength
+
+       -- * The config structure
+       , CoreConfig(..)
+       , coreConfig
+
+       , genesis
+       , genesisBinSuffix
+
+       -- * Constants
+       , isDevelopment
+       , dbSerializeVersion
+       , genesisKeysN
+       , memPoolLimitRatio
+
+       , nonCriticalCQBootstrap
+       , criticalCQBootstrap
+       , nonCriticalCQ
+       , criticalCQ
+       , criticalForkThreshold
+       , fixedTimeCQ
+       , fixedTimeCQSec
+
+       , webLoggingEnabled
+
+       ) where
+
+import           Universum
+
+import           Data.Aeson                 (FromJSON (..), genericParseJSON)
+import           Data.Tagged                (Tagged (..))
+import           Data.Time.Units            (Microsecond, Second, convertUnit)
+import           Serokell.Aeson.Options     (defaultOptions)
+import           Serokell.Util              (sec)
+
+import           Pos.Util.Config            (IsConfig (..), configParser,
+                                             parseFromCslConfig)
+import           Pos.Util.Util              ()
+
+----------------------------------------------------------------------------
+-- Constants which are not configurable
+----------------------------------------------------------------------------
+
+-- | Length of shared seed.
+sharedSeedLength :: Integral a => a
+sharedSeedLength = 32
+
+----------------------------------------------------------------------------
+-- Config itself
+----------------------------------------------------------------------------
+
+data CoreConfig = CoreConfig
+    {
+      -- | Path to the JSON description of the genesis data.
+      ccGenesis                      :: !FilePath
+
+      -- TODO should remove this one.
+    , ccGenesisBinSuffix             :: !String
+      
+      -- | Versioning for values in node's DB
+    , ccDbSerializeVersion           :: Word8
+    , -- | Number of pre-generated keys
+      ccGenesisN                     :: !Int
+      -- | Size of mem pool will be limited by this value muliplied by block
+      -- size limit.
+    , ccMemPoolLimitRatio            :: !Word
+
+      -- Chain quality thresholds and other constants to detect
+      -- suspicious things.
+
+      -- | If chain quality in bootstrap era is less than this value,
+      -- non critical misbehavior will be reported.
+    , ccNonCriticalCQBootstrap       :: !Double
+      -- | If chain quality in bootstrap era is less than this value,
+      -- critical misbehavior will be reported.
+    , ccCriticalCQBootstrap          :: !Double
+      -- | If chain quality after bootstrap era is less than this
+      -- value, non critical misbehavior will be reported.
+    , ccNonCriticalCQ                :: !Double
+      -- | If chain quality after bootstrap era is less than this
+      -- value, critical misbehavior will be reported.
+    , ccCriticalCQ                   :: !Double
+      -- | Number of blocks such that if so many blocks are rolled
+      -- back, it requires immediate reaction.
+    , ccCriticalForkThreshold        :: !Int
+      -- | Chain quality will be also calculated for this amount of seconds.
+    , ccFixedTimeCQ                  :: !Int
+
+      -- Web settings
+
+      -- | Whether incoming requests logging should be performed by web
+      -- part
+    , ccWebLoggingEnabled            :: !Bool
+    }
+    deriving (Show, Generic)
+
+coreConfig :: CoreConfig
+coreConfig =
+    case parseFromCslConfig configParser of
+        Left err -> error (toText ("Couldn't parse core config: " ++ err))
+        Right x  -> x
+
+instance FromJSON CoreConfig where
+    parseJSON = genericParseJSON defaultOptions
+
+instance IsConfig CoreConfig where
+    configPrefix = Tagged Nothing
+
+-- | Check invariants
+-- TODO this should be run against the genesis data.
+{-
+checkConstants :: CoreConfig -> A.Parser CoreConfig
+checkConstants cs@CoreConfig{..} = do
+    
+    let check :: [a -> Bool] -> a -> Bool
+        check ps x = all ($ x) ps
+    unless (check [(>= 0), (< 1)] ccGenesisMpcThd) $
+        fail "CoreConfig: genesisMpcThd is not in range [0, 1)"
+    unless (check [(>= 0), (< 1)] ccGenesisUpdateVoteThd) $
+        fail "CoreConfig: genesisUpdateVoteThd is not in range [0, 1)"
+    unless (check [(>= 0), (< 1)] ccGenesisHeavyDelThd) $
+        fail "CoreConfig: genesisHeavyDelThd is not in range [0, 1)"
+    unless (check [(> 0), (< 1)] ccGenesisUpdateProposalThd) $
+        fail "CoreConfig: genesisUpdateProposalThd is not in range (0, 1)"
+    unless (check [(> 0), (< 1)] ccGenesisSoftforkInit) $
+        fail "CoreConfig: genesisSoftforkInit is not in range (0, 1)"
+    unless (check [(> 0), (< 1)] ccGenesisSoftforkMin) $
+        fail "CoreConfig: genesisSoftforkMin is not in range (0, 1)"
+    unless (check [(> 0), (< 1)] ccGenesisSoftforkDec) $
+        fail "CoreConfig: genesisSoftforkDec is not in range (0, 1)"
+    pure cs
+-}
+
+----------------------------------------------------------------------------
+-- Constants taken from the config
+----------------------------------------------------------------------------
+
+-- | @True@ if current mode is 'Development'.
+isDevelopment :: Bool
+#ifdef DEV_MODE
+isDevelopment = True
+#else
+isDevelopment = False
+#endif
+
+genesis :: FilePath
+genesis = ccGenesis coreConfig
+
+genesisBinSuffix :: String
+genesisBinSuffix = ccGenesisBinSuffix coreConfig
+
+-- | DB format version. When serializing items into the node's DB, the values are paired
+-- with this constant.
+dbSerializeVersion :: Word8
+dbSerializeVersion = fromIntegral . ccDbSerializeVersion $ coreConfig
+
+-- | Number of pre-generated keys
+genesisKeysN :: Integral i => i
+genesisKeysN = fromIntegral . ccGenesisN $ coreConfig
+
+-- | Size of mem pool will be limited by this value muliplied by block
+-- size limit.
+memPoolLimitRatio :: Integral i => i
+memPoolLimitRatio = fromIntegral . ccMemPoolLimitRatio $ coreConfig
+
+-- | If chain quality in bootstrap era is less than this value,
+-- non critical misbehavior will be reported.
+nonCriticalCQBootstrap :: Double
+nonCriticalCQBootstrap = ccNonCriticalCQBootstrap coreConfig
+
+-- | If chain quality in bootstrap era is less than this value,
+-- critical misbehavior will be reported.
+criticalCQBootstrap :: Double
+criticalCQBootstrap = ccCriticalCQBootstrap coreConfig
+
+-- | If chain quality after bootstrap era is less than this
+-- value, non critical misbehavior will be reported.
+nonCriticalCQ :: Double
+nonCriticalCQ = ccNonCriticalCQ coreConfig
+
+-- | If chain quality after bootstrap era is less than this
+-- value, critical misbehavior will be reported.
+criticalCQ :: Double
+criticalCQ = ccCriticalCQ coreConfig
+
+-- | If chain quality after bootstrap era is less than this
+-- value, critical misbehavior will be reported.
+criticalForkThreshold :: Integral i => i
+criticalForkThreshold = fromIntegral . ccCriticalForkThreshold $ coreConfig
+
+-- | Chain quality will be also calculated for this amount of time.
+fixedTimeCQ :: Microsecond
+fixedTimeCQ = sec . ccFixedTimeCQ $ coreConfig
+
+-- | 'fixedTimeCQ' expressed as seconds.
+fixedTimeCQSec :: Second
+fixedTimeCQSec = convertUnit fixedTimeCQ
+
+-- | Web logging might be disabled for security concerns.
+webLoggingEnabled :: Bool
+webLoggingEnabled = ccWebLoggingEnabled coreConfig

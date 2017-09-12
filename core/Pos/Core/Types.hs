@@ -105,9 +105,11 @@ import           System.Random              (Random (..))
 
 import           Pos.Core.Fee               (TxFeePolicy)
 import           Pos.Core.Timestamp         (TimeDiff (..), Timestamp (..))
-import           Pos.Crypto                 (AbstractHash, HDAddressPayload, Hash,
-                                             ProxySecretKey, ProxySignature, PublicKey,
-                                             RedeemPublicKey)
+import           Pos.Crypto.Signing         (PublicKey, ProxySecretKey, ProxySignature)
+import           Pos.Crypto.RedeemSigning   (RedeemPublicKey)
+import           Pos.Crypto.Hashing         (Hash, AbstractHash)
+import           Pos.Crypto.HD              (HDAddressPayload)
+
 import           Pos.Data.Attributes        (Attributes)
 
 ----------------------------------------------------------------------------

@@ -3,8 +3,6 @@
 
 module Pos.Core.Constants.Typed
        (
-         staticSysStart
-       , staticBlkSecurityParam
 
        -- * Genesis constants
        , genesisBlockVersionData
@@ -20,62 +18,24 @@ module Pos.Core.Constants.Typed
        , genesisUpdateProposalThd
        , genesisUpdateImplicit
        , genesisSoftforkRule
+       , genesisTxFeePolicy
        , genesisUnlockStakeEpoch
        ) where
 
 import           Universum
 
-import           Data.Time.Units            (Millisecond, convertUnit)
+import           Data.Time.Units            (Millisecond)
 import           Serokell.Data.Memory.Units (Byte)
-import           Serokell.Util              (sec)
 
-import           Pos.Core.Constants.Raw     (CoreConfig (..), coreConfig,
-                                             staticSysStartRaw)
+import           Pos.Core.Constants.Raw     (coreConfig)
 import           Pos.Core.Fee               (TxFeePolicy)
-import           Pos.Core.Fee.Config        (ConfigOf (..))
 import           Pos.Core.Types             (BlockCount, BlockVersionData (..),
                                              CoinPortion, EpochIndex (..), ScriptVersion,
-                                             SoftforkRule (..), Timestamp (..),
-                                             unsafeCoinPortionFromDouble)
-
-----------------------------------------------------------------------------
--- Constants taken from the config
-----------------------------------------------------------------------------
-
--- | System start time embedded into binary.
-staticSysStart :: Timestamp
-staticSysStart = Timestamp staticSysStartRaw
-
--- | Security parameter which is maximum number of blocks which can be
--- rolled back. This value is embedded into library and can be used
--- only for initialization. The actual value should be fetched from
--- runtime context (it can differ from this one).
-staticBlkSecurityParam :: BlockCount
-staticBlkSecurityParam = fromIntegral $ ccK coreConfig
+                                             SoftforkRule (..), Timestamp (..))
 
 ----------------------------------------------------------------------------
 -- Genesis
 ----------------------------------------------------------------------------
-
--- | 'BlockVersionData' for genesis 'BlockVersion'.
-genesisBlockVersionData :: BlockVersionData
-genesisBlockVersionData =
-    BlockVersionData
-    { bvdScriptVersion = genesisScriptVersion
-    , bvdSlotDuration = genesisSlotDuration
-    , bvdMaxBlockSize = genesisMaxBlockSize
-    , bvdMaxHeaderSize = genesisMaxHeaderSize
-    , bvdMaxTxSize = genesisMaxTxSize
-    , bvdMaxProposalSize = genesisMaxUpdateProposalSize
-    , bvdMpcThd = genesisMpcThd
-    , bvdHeavyDelThd = genesisHeavyDelThd
-    , bvdUpdateVoteThd = genesisUpdateVoteThd
-    , bvdUpdateProposalThd = genesisUpdateProposalThd
-    , bvdUpdateImplicit = genesisUpdateImplicit
-    , bvdSoftforkRule = genesisSoftforkRule
-    , bvdTxFeePolicy = genesisTxFeePolicy
-    , bvdUnlockStakeEpoch = genesisUnlockStakeEpoch
-    }
 
 -- | ScriptVersion used at the very beginning
 genesisScriptVersion :: ScriptVersion
@@ -83,66 +43,51 @@ genesisScriptVersion = 0
 
 -- | Initial length of slot.
 genesisSlotDuration :: Millisecond
-genesisSlotDuration = convertUnit . sec $
-    ccGenesisSlotDurationSec coreConfig
+genesisSlotDuration = bvdSlotDuration genesisBlockVersionData
 
 -- | Initial block size limit.
 genesisMaxBlockSize :: Byte
-genesisMaxBlockSize = ccGenesisMaxBlockSize coreConfig
+genesisMaxBlockSize = bvdMaxBlockSize genesisBlockVersionData
 
 -- | Maximum size of a block header (in bytes)
 genesisMaxHeaderSize :: Byte
-genesisMaxHeaderSize = ccGenesisMaxHeaderSize coreConfig
+genesisMaxHeaderSize = bvdMaxHeaderSize genesisBlockVersionData
 
 -- | See 'Pos.CompileConfig.ccGenesisMaxTxSize'.
 genesisMaxTxSize :: Byte
-genesisMaxTxSize = ccGenesisMaxTxSize coreConfig
+genesisMaxTxSize = bvdMaxTxSize genesisBlockVersionData
 
 -- | See 'ccGenesisMaxUpdateProposalSize'.
 genesisMaxUpdateProposalSize :: Byte
-genesisMaxUpdateProposalSize =
-    ccGenesisMaxUpdateProposalSize coreConfig
+genesisMaxUpdateProposalSize = bvdMaxProposalSize genesisBlockVersionData
 
 -- | See 'Pos.CompileConfig.ccGenesisMpcThd'.
 genesisMpcThd :: CoinPortion
-genesisMpcThd = unsafeCoinPortionFromDouble $
-    ccGenesisMpcThd coreConfig
+genesisMpcThd = bvdMpcThd genesisBlockVersionData
 
 -- | See 'Pos.CompileConfig.ccGenesisHeavyDelThd'.
 genesisHeavyDelThd :: CoinPortion
-genesisHeavyDelThd = unsafeCoinPortionFromDouble $
-    ccGenesisHeavyDelThd coreConfig
+genesisHeavyDelThd = bvdHeavyDelThd genesisBlockVersionData
 
 -- | See 'ccGenesisUpdateVoteThd'.
 genesisUpdateVoteThd :: CoinPortion
-genesisUpdateVoteThd = unsafeCoinPortionFromDouble $
-    ccGenesisUpdateVoteThd coreConfig
+genesisUpdateVoteThd = bvdUpdateVoteThd genesisBlockVersionData
 
 -- | See 'ccGenesisUpdateProposalThd'.
 genesisUpdateProposalThd :: CoinPortion
-genesisUpdateProposalThd = unsafeCoinPortionFromDouble $
-    ccGenesisUpdateProposalThd coreConfig
+genesisUpdateProposalThd = bvdUpdateProposalThd genesisBlockVersionData
 
 -- | See 'ccGenesisUpdateImplicit'.
 genesisUpdateImplicit :: Integral i => i
 genesisUpdateImplicit = fromIntegral $
-    ccGenesisUpdateImplicit coreConfig
+    bvdUpdateImplicit genesisBlockVersionData
 
 -- | Genesis softfork resolution rule.
 genesisSoftforkRule :: SoftforkRule
-genesisSoftforkRule =
-    SoftforkRule
-    { srMinThd =
-          unsafeCoinPortionFromDouble $ ccGenesisSoftforkMin coreConfig
-    , srInitThd =
-          unsafeCoinPortionFromDouble $ ccGenesisSoftforkInit coreConfig
-    , srThdDecrement =
-          unsafeCoinPortionFromDouble $ ccGenesisSoftforkDec coreConfig
-    }
+genesisSoftforkRule = bvdSoftforkRule genesisBlockVersionData
 
 genesisTxFeePolicy :: TxFeePolicy
-genesisTxFeePolicy = getConfigOf (ccGenesisTxFeePolicy coreConfig)
+genesisTxFeePolicy = bvdTxFeePolicy genesisBlockVersionData
 
 genesisUnlockStakeEpoch :: EpochIndex
-genesisUnlockStakeEpoch = EpochIndex $
-    ccGenesisUnlockStakeEpoch coreConfig
+genesisUnlockStakeEpoch = bvdUnlockStakeEpoch genesisBlockVersionData

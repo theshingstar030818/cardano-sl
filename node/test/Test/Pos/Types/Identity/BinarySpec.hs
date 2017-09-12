@@ -10,7 +10,7 @@ import           Universum
 import           Pos.Arbitrary.Core    ()
 import           Pos.Arbitrary.Infra   ()
 import qualified Pos.Core              as T
-import           Pos.Core.Context      (giveStaticConsts)
+import           Pos.Core.Genesis      (giveStaticConsts)
 import qualified Pos.Core.Fee          as Fee
 import           Pos.Data.Attributes   (Attributes (..))
 import           Pos.Util.BackupPhrase (BackupPhrase)

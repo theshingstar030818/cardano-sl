@@ -55,7 +55,7 @@ import           System.Wlog                           (LoggerConfig (..), Sever
                                                         retrieveLogContent)
 
 import           Paths_cardano_sl_infra                (version)
-import           Pos.Core.Constants                    (protocolMagic)
+import           Pos.Core.Genesis                      (protocolMagic)
 import           Pos.Exception                         (CardanoFatalError)
 import           Pos.KnownPeers                        (MonadFormatPeers (..))
 import           Pos.Reporting.Exceptions              (ReportingError (..))

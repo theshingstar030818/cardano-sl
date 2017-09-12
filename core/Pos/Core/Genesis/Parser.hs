@@ -5,6 +5,9 @@ module Pos.Core.Genesis.Parser
        , genesisSpec
        , setGenesisSpec
        , setGenesisSpecFromFile
+
+       , genData
+       , setGenData
        ) where
 
 import           Universum
@@ -19,7 +22,7 @@ import           System.FilePath        (takeBaseName, takeExtension, (</>))
 import           System.IO.Unsafe       (unsafePerformIO)
 
 import           Pos.Core.Constants     (genesisBinSuffix)
-import           Pos.Core.Genesis.Types (GenesisSpec)
+import           Pos.Core.Genesis.Types (GenesisSpec, GenesisData)
 import           Pos.Util.Future        (newInitFuture)
 
 -- | Pre-generated genesis data from /genesis-core.bin/ for all genesis
@@ -68,3 +71,10 @@ setGenesisSpecFromFile path = do
         Left err -> error $ "Failed to read genesis input from " <>
                             toText path <> ": " <> err
         Right gd -> setGenesisSpec gd
+
+genData :: GenesisData
+setGenData :: GenesisData -> IO ()
+(genData, setGenData) =
+    unsafePerformIO (newInitFuture "genData")
+{-# NOINLINE genData #-}
+{-# NOINLINE setGenData #-}

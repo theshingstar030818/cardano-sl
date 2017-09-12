@@ -33,6 +33,7 @@ import           Universum
 
 import           Control.Lens         (at)
 import           Control.Monad.Except (MonadError (throwError))
+import           Data.Aeson           (FromJSON (..))
 import qualified Data.HashMap.Strict  as HM
 import qualified Data.Text.Buildable  as Buildable
 import           Formatting           (bprint, (%))
@@ -329,4 +330,7 @@ data GenesisData = GenesisData
     , gcProtocolConsts   :: !ProtocolConstants
     , gcAvvmDistr        :: !GenesisAvvmBalances
     , gcFtsSeed          :: !SharedSeed
-    }
+    } deriving (Show, Generic)
+
+instance FromJSON GenesisData where
+    parseJSON = error "TODO parse GenesisData"

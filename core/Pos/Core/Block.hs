@@ -38,7 +38,7 @@ import           Control.Lens         (makeLenses)
 import           Control.Monad.Except (MonadError (throwError))
 
 import           Pos.Core.Class       (HasHeaderHash (..), HasPrevBlock (..))
-import           Pos.Core.Constants   (genesisHash)
+import           Pos.Core.Genesis     (genesisHash)
 import           Pos.Core.Types       (HeaderHash)
 
 ----------------------------------------------------------------------------

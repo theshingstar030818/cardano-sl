@@ -6,7 +6,6 @@ module Pos.Core.Context.Const
        ( CoreConstants (..)
        , HasCoreConstants
        , giveConsts
-       , giveStaticConsts
        , ccBlkSecurityParam
        , blkSecurityParam
        , slotSecurityParam
@@ -20,7 +19,6 @@ import           Universum
 import           Control.Lens       (makeLenses)
 import           Data.Reflection    (Given (..), give)
 
-import           Pos.Core.Constants (staticBlkSecurityParam)
 import           Pos.Core.Types     (BlockCount (..), SlotCount)
 
 -- | Core constants. They should be really constant and never change.
@@ -34,9 +32,6 @@ type HasCoreConstants = Given CoreConstants
 
 giveConsts :: CoreConstants -> (HasCoreConstants => r) -> r
 giveConsts = give
-
-giveStaticConsts :: (HasCoreConstants => r) -> r
-giveStaticConsts = giveConsts $ CoreConstants staticBlkSecurityParam
 
 blkSecurityParam :: HasCoreConstants => BlockCount
 blkSecurityParam = _ccBlkSecurityParam given
