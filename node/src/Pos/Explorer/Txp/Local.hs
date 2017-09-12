@@ -15,6 +15,7 @@ import qualified Data.HashMap.Strict   as HM
 import qualified Data.List.NonEmpty    as NE
 import qualified Data.Map              as M (fromList)
 import           Formatting            (build, sformat, (%))
+import           JsonLog               (CanJsonLog (..))
 import           Mockable              (CurrentTime, Mockable)
 import           System.Wlog           (WithLogger, logDebug)
 
@@ -30,7 +31,8 @@ import           Pos.Slotting          (MonadSlots (getCurrentSlot), getSlotStar
 import           Pos.StateLock         (Priority (..), StateLock, StateLockMetrics,
                                         withStateLock)
 import           Pos.Txp.Core          (Tx (..), TxAux (..), TxId, toaOut, txOutAddress)
-import           Pos.Txp.MemState      (GenericTxpLocalDataPure, MonadTxpMem,
+import           Pos.Txp.MemState      (GenericTxpLocalDataPure, MemPoolModifyReason (..),
+                                        MonadTxpMem,
                                         getLocalTxsMap, getTxpExtra, getUtxoModifier,
                                         modifyTxpLocalData, setTxpLocalData)
 import           Pos.Txp.Toil          (GenericToilModifier (..), MonadUtxoRead (..),
@@ -97,11 +99,11 @@ instance MonadTxExtraRead EProcessTxMode where
         HM.lookup addr . eetAddrBalances <$> view eptcExtraBase
 
 eTxProcessTransaction
-    :: (ETxpLocalWorkMode ctx m, MonadMask m,
-        HasLens' ctx StateLock, HasLens' ctx StateLockMetrics)
+    :: (ETxpLocalWorkMode ctx m, MonadMask m, CanJsonLog m,
+        HasLens' ctx StateLock, HasLens' ctx (StateLockMetrics MemPoolModifyReason))
     => (TxId, TxAux) -> m (Either ToilVerFailure ())
 eTxProcessTransaction itw =
-    withStateLock LowPriority "eTxProcessTransaction" $ \__tip -> eTxProcessTransactionNoLock itw
+    withStateLock LowPriority ProcessTransaction $ \__tip -> eTxProcessTransactionNoLock itw
 
 eTxProcessTransactionNoLock
     :: (ETxpLocalWorkMode ctx m)

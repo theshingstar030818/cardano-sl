@@ -42,6 +42,7 @@ import qualified Data.Map.Strict              as M (lookup)
 import qualified Data.Text.Buildable
 import qualified Ether
 import           Formatting                   (bprint, build, (%))
+import           JsonLog                      (CanJsonLog (..))
 import           Mockable                     (CurrentTime, Mockable)
 import           Serokell.Util.Text           (listJson)
 import           System.Wlog                  (WithLogger)
@@ -71,7 +72,8 @@ import           Pos.Explorer.Txp.Local       (eTxProcessTransaction)
 #else
 import           Pos.Txp                      (txProcessTransaction)
 #endif
-import           Pos.Txp                      (MonadTxpMem, MonadUtxo, MonadUtxoRead,
+import           Pos.Txp                      (MemPoolModifyReason,
+                                               MonadTxpMem, MonadUtxo, MonadUtxoRead,
                                                ToilT, Tx (..), TxAux (..), TxId, TxOut,
                                                TxOutAux (..), TxWitness, TxpError (..),
                                                applyTxToUtxo, evalToilTEmpty,
@@ -228,7 +230,7 @@ instance {-# OVERLAPPABLE #-}
     (MonadTxHistory ssc m, MonadTrans t, Monad (t m)) =>
         MonadTxHistory ssc (t m)
 
-type TxHistoryEnv ctx m =
+type TxHistoryEnv ctx slr m =
     ( MonadRealDB ctx m
     , MonadDBRead m
     , MonadGState m
@@ -241,22 +243,24 @@ type TxHistoryEnv ctx m =
     , HasLens' ctx GenesisContext
     , MonadTxpMem TxpExtra_TMP ctx m
     , HasLens' ctx StateLock
-    , HasLens' ctx StateLockMetrics
+    , HasLens' ctx (StateLockMetrics slr)
     , MonadBaseControl IO m
     , Mockable CurrentTime m
     , MonadFormatPeers m
     , HasReportingContext ctx
+    , CanJsonLog m
     )
 
-type TxHistoryEnv' ssc ctx m =
+type TxHistoryEnv' ssc ctx slr m =
     ( MonadBlockDB ssc m
-    , TxHistoryEnv ctx m
+    , TxHistoryEnv ctx slr m
     )
 
 type GenesisHistoryFetcher m = ToilT () (GenesisToil m)
 
 getBlockHistoryDefault
-    :: forall ssc ctx m. (HasCoreConstants, SscHelpersClass ssc, TxHistoryEnv' ssc ctx m)
+    :: forall ssc ctx m.
+       (HasCoreConstants, SscHelpersClass ssc, TxHistoryEnv' ssc ctx MemPoolModifyReason m)
     => [Address] -> m (DList TxHistoryEntry)
 getBlockHistoryDefault addrs = do
     bot         <- headerHash <$> genesisBlock0M @ssc
@@ -276,7 +280,7 @@ getBlockHistoryDefault addrs = do
     runGenesisToil . evalToilTEmpty $ blockFetcher bot
 
 getLocalHistoryDefault
-    :: forall ctx m. TxHistoryEnv ctx m
+    :: forall ctx m. TxHistoryEnv ctx MemPoolModifyReason m
     => [Address] -> m (DList TxHistoryEntry)
 getLocalHistoryDefault addrs = runDBToil . evalToilTEmpty $ do
     let mapper (txid, TxAux {..}) =
@@ -288,7 +292,7 @@ getLocalHistoryDefault addrs = runDBToil . evalToilTEmpty $ do
            maybeThrow topsortErr (topsortTxs (view _1) ltxs)
     return $ DL.fromList txs
 
-saveTxDefault :: TxHistoryEnv ctx m => (TxId, TxAux) -> m ()
+saveTxDefault :: TxHistoryEnv ctx MemPoolModifyReason m => (TxId, TxAux) -> m ()
 saveTxDefault txw = do
 #ifdef WITH_EXPLORER
     res <- eTxProcessTransaction txw
