@@ -123,7 +123,7 @@ dev: &dev
 
 
   # These constants mostly depend on hardware capabilities
-  memPoolLimit: 200 # mem pool will be limited to this many transactions
+  memPoolLimit: 400 # mem pool will be limited to this many transactions
 
   genesisBinSuffix: tn # it is set here arbitrarily, it won't be actually used
 
