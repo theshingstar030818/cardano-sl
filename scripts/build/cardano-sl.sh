@@ -197,7 +197,7 @@ if [[ $prodModesCounter -gt 0 ]]; then
   fi
 fi
 
-commonargs='--test --no-haddock-deps --bench --jobs=4'
+commonargs='--profile --test --no-haddock-deps --bench --jobs=4'
 norun='--no-run-tests --no-run-benchmarks'
 
 if [[ $no_nix == true ]]; then
@@ -256,6 +256,7 @@ if [[ $werror == true ]];
   else ghc_opts="$ghc_opts -Wwarn"
 fi
 
+#   then ghc_opts="$ghc_opts +RTS -h -p -A2G -n4m -RTS"
 if [[ $ram == true ]];
   then ghc_opts="$ghc_opts +RTS -A2G -n4m -RTS"
   else ghc_opts="$ghc_opts +RTS -A256m -n2m -RTS"
