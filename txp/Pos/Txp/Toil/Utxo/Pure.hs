@@ -47,7 +47,8 @@ execUtxoStateT = Ether.execStateT
 verifyTxUtxoPure
     :: MonadError ToilVerFailure m
     => VTxContext -> Utxo -> TxAux -> m (TxUndo, Maybe TxFee)
-verifyTxUtxoPure ctx utxo txAux = evalUtxoStateT (verifyTxUtxo ctx txAux) utxo
+verifyTxUtxoPure ctx utxo txAux =
+    trace @Text ("Verify tx utxo: " <> show utxo) $ evalUtxoStateT (verifyTxUtxo ctx txAux) utxo
 
 -- | Pure version of applyTxToUtxo.
 applyTxToUtxoPure :: WithHash Tx -> Utxo -> Utxo

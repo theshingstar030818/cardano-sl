@@ -35,7 +35,7 @@ module Pos.Client.Txp.Util
 
 import           Universum
 
-import           Control.Lens             (makeLenses, (%=), (.=))
+import           Control.Lens             (makeLenses, (%=), (<.=))
 import           Control.Monad.Except     (ExceptT, MonadError (throwError), runExceptT)
 import           Data.Fixed               (Fixed, HasResolution)
 import qualified Data.HashMap.Strict      as HM
@@ -46,7 +46,7 @@ import qualified Data.Map                 as M
 import qualified Data.Semigroup           as S
 import qualified Data.Text.Buildable
 import qualified Data.Vector              as V
-import           Formatting               (bprint, build, sformat, stext, (%))
+import           Formatting               (bprint, build, sformat, shown, stext, (%))
 import           Serokell.Util            (listJson)
 
 import           Pos.Binary               (biSize)
@@ -286,7 +286,10 @@ prepareTxRaw
     -> TxOutputs
     -> TxFee
     -> TxCreator m TxRaw
-prepareTxRaw utxo outputs (TxFee fee) = do
+prepareTxRaw utxo outputs (TxFee fee) =
+  trace @Text (sformat ("Forming transaction, utxo: "%shown) utxo) $ do
+  trace @Text (sformat ("Forming transaction, sorted grouped utxo: "%shown) sortedGroups) $ do
+
     mapM_ (checkIsNotRedeemAddr . txOutAddress . toaOut) outputs
 
     totalMoney <- sumTxOuts outputs
@@ -320,7 +323,7 @@ prepareTxRaw utxo outputs (TxFee fee) = do
     pickInputs inps = do
         moneyLeft <- use ipsMoneyLeft
         if moneyLeft == mkCoin 0
-            then return inps
+            then trace @Text "Tx forming: done" $ return inps
             else do
                 mNextOutGroup <- head <$> use ipsAvailableOutputGroups
                 case mNextOutGroup of
@@ -328,9 +331,11 @@ prepareTxRaw utxo outputs (TxFee fee) = do
                         then throwError $ NotEnoughAllowedMoney moneyLeft
                         else throwError $ NotEnoughMoney moneyLeft
                     Just UtxoGroup {..} -> do
-                        ipsMoneyLeft .= unsafeSubCoin moneyLeft (min ugTotalMoney moneyLeft)
+                        moneyRem <- ipsMoneyLeft <.= unsafeSubCoin moneyLeft (min ugTotalMoney moneyLeft)
                         ipsAvailableOutputGroups %= tail
-                        pickInputs (toList ugUtxo ++ inps)
+                        trace @Text ("Tx forming: added " <> pretty ugAddr) $
+                            trace @Text ("Tx forming: money to spend remained: " <> pretty moneyRem) $
+                            pickInputs (toList ugUtxo ++ inps)
 
     formTxInputs (inp, TxOutAux txOut) = (txOut, inp)
 
@@ -392,6 +397,7 @@ createMTx
     -> AddrData m
     -> m (Either TxError TxWithSpendings)
 createMTx utxo hdwSigners outputs addrData =
+    (\v@(x, _) -> trace @Text ("Made transaction: " <> pretty (hash x)) v) <<$>>
     createGenericTx (makeMPubKeyTxAddrs hdwSigners)
     utxo outputs addrData
 

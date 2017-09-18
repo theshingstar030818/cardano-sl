@@ -12,10 +12,10 @@ import           Universum
 import           Control.Lens              (_Left)
 import           Control.Monad.Error.Class (MonadError (..))
 import qualified Data.List.NonEmpty        as NE
-import           Formatting                (int, sformat, (%))
+import           Formatting                (build, int, sformat, (%))
 import           Serokell.Util             (VerificationRes, allDistinct, enumerate,
-                                            formatFirstError, verResToMonadError,
-                                            verifyGeneric)
+                                            formatFirstError, traceIdF,
+                                            verResToMonadError, verifyGeneric)
 
 import           Pos.Binary.Txp.Core       ()
 import           Pos.Core                  (AddrType (..), Address (..), addressF,
@@ -77,17 +77,18 @@ verifyTxUtxo
     => VTxContext
     -> TxAux
     -> m (TxUndo, Maybe TxFee)
-verifyTxUtxo ctx@VTxContext {..} ta@(TxAux UnsafeTx {..} witnesses) = do
+verifyTxUtxo ctx@VTxContext {..} ta@(TxAux UnsafeTx {..} witnesses) =
+    trace @Text ("Verify tx: " <> pretty (hash ta)) $ do
     let unknownTxInMB = find (isTxInUnknown . snd) $ zip [0..] (toList _txInputs)
     case (vtcVerifyAllIsKnown, unknownTxInMB) of
         (True, Just (inpId, txIn)) -> throwError $
-            ToilUnknownInput inpId txIn
-        (False, Just _) -> do
+            trace @Text ("Verify tx: wow error!") $ ToilUnknownInput inpId txIn
+        (False, Just _) -> trace @Text "Some input unknown" $ do
             -- Case when at least one input isn't known
             minimalReasonableChecks
             resolvedInputs <- mapM (fmap rightToMaybe . runExceptT . resolveInput) _txInputs
             pure (map (fmap snd) resolvedInputs, Nothing)
-        _               -> do
+        _               -> trace @Text "All inputs are known" $ do
             -- Case when all inputs are known
             minimalReasonableChecks
             resolvedInputs <- mapM resolveInput _txInputs
@@ -104,7 +105,7 @@ verifyTxUtxo ctx@VTxContext {..} ta@(TxAux UnsafeTx {..} witnesses) = do
 resolveInput
     :: (MonadUtxoRead m, MonadError ToilVerFailure m)
     => TxIn -> m (TxIn, TxOutAux)
-resolveInput txIn = (txIn, ) <$> (note (ToilNotUnspent txIn) =<< utxoGet txIn)
+resolveInput txIn = (txIn, ) <$> (note (ToilNotUnspent txIn) =<< (utxoGet txIn <&> \x -> trace @Text (sformat ("Verify tx: resolving input "%build%": "%build) txIn x) x))
 
 verifySums
     :: MonadError ToilVerFailure m
