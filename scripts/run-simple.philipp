@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+
+if [[ $1 == "" ]]; then
+ echo "Specify delay as first param"
+ exit 1
+fi
+
+./CardanoCSL.hs -c config.yaml stop
+sleep 20s
+./CardanoCSL.hs -c config.yaml start
+sleep 20s
+
+clustersize=`nixops info -d benchmarks | grep nodeip | wc -l`
+ntransactions=20000
+start=`date +%s`
+date +%s > experiments/start.txt
+
+
+peer_id=`cat /dev/urandom | head -c 14 | base64 | sed 's/\//_/g' | sed 's/\+/-/g'`
+
+./result/bin/cardano-wallet \
+    --db-path wdb \
+    --log-config static/csl-logging.yaml --logs-prefix experiments/wallet  \
+    --rich-poor-distr "($clustersize,50000,6000000000,0.99)"  \
+    --peer 52.58.254.18:3000/eFFRSklWaVI5aEJpN3M= \
+    --peer 35.157.136.18:3000/enpRazlhSktKOUNHRDM= \
+    --peer 52.57.17.175:3000/Uy1HSjFIRFp5SHBJU18= \
+    --peer 52.57.174.41:3000/bnpjRU82Q3Y3dEtEM1I= \
+    --peer 52.57.108.236:3000/Z3o0OE01SHVhZnNkbWg= \
+    --peer 35.157.49.182:3000/UUJPMFNWNGd4dnJHY0I= \
+    --peer 52.57.64.101:3000/bHJod3NQWWdFdldSbUI= \
+    --peer 52.59.134.251:3000/ZFlHdURqMEJySnhDc1Q= \
+    --peer 52.57.199.124:3000/OGhWZDNKNUpjMEdDa0k= \
+    --peer 52.57.129.227:3000/VTZDNFJDLU0yVWlDa24= \
+    --peer 52.58.213.239:3000/S2VJclZvX0h5RXJISWs= \
+    --peer 52.58.95.12:3000/QTA5QldOMVNGUEkyNG4= \
+    --peer 52.58.2.61:3000/RlBnOHduRTlQeFk0Vnc= \
+    --peer 35.158.59.237:3000/bVdPZ3dMdTVqOXhLZjY= \
+    --peer 52.59.187.34:3000/WXBSTWF6M3lUVGlYSC0= \
+    --peer 35.157.54.199:3000/Mjh4Wm5rYjcxYUZ4WVQ= \
+    --peer 35.157.216.206:3000/UGlOd3JxaHc2cW84NE4= \
+    --peer 52.59.79.176:3000/RXJTVG9tNm9Pa256S0s= \
+    --peer 52.58.188.237:3000/T0JOdU9kbk9tVGtOWm8= \
+    --peer 52.28.66.167:3000/UXJ2dEJyMldnSE1KT3Y= \
+    --peer-id "$peer_id" \
+    --system-start 1 cmd --commands "send-to-all-genesis $ntransactions $1 $2 tps-sent.csv" # > /dev/null 2>&1
+end=`date +%s`
+date +%s > experiments/end.txt
+
+    # --peer :3000/WDFCQTlkNzFOdU9CdHY= \
+    # --peer :3000/VXJvNlJMU0otd0ZVaWY= \
+    # --peer :3000/c0hrcTdVRmp0TWR4RFY= \
+    # --peer :3000/X0h2eEFqX1pBVlNSR0o= \
+    # --peer :3000/SUZLcFVVRVlzMi1FTzQ= \
+
+    # --peer :3000/U0JmN1V5aS1fZTVYUHA= \
+    # --peer :3000/UEZTdlFwNHh2aGFwNWQ= \
+    # --peer :3000/aTdwUlFBc0ZIOVJ3Wm8= \
+    # --peer :3000/LUxiY29NUXBLVHRFcVg= \
+    # --peer :3000/WGZOVzZZeUozaFl0bkc= \
+
+    # --peer :3000/d0wyRENISF9TcU5XZEw= \
+    # --peer :3000/dnpqaUd2c2hjRFE1OXM= \
+    # --peer :3000/T3BRZHdmVVhzNEVqMW4= \
+    # --peer :3000/YUpXazNhWWlRUERDcU8= \
+    # --peer :3000/WFBST0ZVQ3B1bURkc0o= \
+
+    # --peer :3000/ZmtBYUtiSnVGRE5rOWQ= \
+    # --peer :3000/eUQ1NDZaaDlpWXgwSzU= \
+    # --peer :3000/ZE9zaFdlaS1zUzBaenc= \
+    # --peer :3000/YWlINVJUVXotVmdLdkQ= \
+    # --peer :3000/S2RRVFlFRllDYjBEbV8= \
+
+    # --peer :3000/a0Q0WHFqaDRWajEwVm4= \
+    # --peer :3000/VHY5U29CWEVJNE9ENVQ= \
+    # --peer :3000/MFlnVjFZMXFKSGFLY2s= \
+    # --peer :3000/VVM0WHI2RkU3Wjh0bUw= \
+    # --peer :3000/MWhFVEF2cHhNTnFybko= \
+
+    # --peer :3000/Y2NIV2U2QVpWSExmc28= \
+    # --peer :3000/SW9VTXY2NXdaT0JhbEg= \
+    # --peer :3000/UVFmXzdCUjFwUXVOTEM= \
+    # --peer :3000/a3pMMmVXLTZfVy1aSks= \
+    # --peer :3000/NmxJZXZKdmc4MHA3TEE= \
+
+    # --peer :3000/NUFQWm9YTkZzdnlZZXQ= \
+    # --peer :3000/dWZrcVBYSi05LXVBRWY= \
+    # --peer :3000/YWdCeXVWTHRfakx2Rkg= \
+    # --peer :3000/cG9QM3UtakRlNDEyZTQ= \
+    # --peer :3000/ejdGYlpaaG5PaEplTVQ= \
+
+    # --peer :3000/SGtyQy1FSjRreUFMQmM= \
+    # --peer :3000/ZDlpTU1meXQzUm5Ua3M= \
+    # --peer :3000/NE5ueUdzeUM2VlBrTTY= \
+    # --peer :3000/SmRja2E3WEhFTnRPRjY= \
+    # --peer :3000/akRpVUh4RzBuN25MWEw= \
+
+    # --peer :3000/NlBlaEY2TzJDT0l3ZWs= \
+    # --peer :3000/VlVRWGVLM2I5Q1BYd0w= \
+    # --peer :3000/REFEQUVHV1htWFVsOFI= \
+    # --peer :3000/NHFsMG95MWFSNWx6RV8= \
+    # --peer :3000/dUVwSVFsekJpbjhwTGQ= \
+
+    # --peer :3000/TE9HTDVSTm4xWnJnS0w= \
+    # --peer :3000/TDR2Um9hdE9iYnV5SW8= \
+    # --peer :3000/VXBnUC1VZ2pyN1RSbjE= \
+    # --peer :3000/bWVJUUI0d1pjOER6ME0= \
+    # --peer :3000/MlZ4REdBanZRbmQ4V3I= \
+
+    # --peer :3000/akRTWlpMV3hhZE1Gcm8= \
+    # --peer :3000/enhwSTJGbkFmWDBYVFc= \
+    # --peer :3000/TTVFSGdkbXQ4N3lDR1U= \
+    # --peer :3000/S1lJQ1YtOFBOTkxXNGw= \
+    # --peer :3000/ODk2Y0ZNcmoxVExESU0= \
+
+    # --peer :3000/Wm9vLWZ0RWg0bDAtWkg= \
+    # --peer :3000/emYza25EREI0U29tV3c= \
+    # --peer :3000/LXdmUEMzbWs4MEhydGQ= \
+    # --peer :3000/bHRaa0xDbGNhSFFMUDk= \
+    # --peer :3000/eHc1QXFoTEJUYzFGU28= \
+
+    # --peer :3000/OHRJRWFRaTlHYVZ2MWw= \
+    # --peer :3000/dDRXZ0JWdjktT013Z00= \
+    # --peer :3000/SENfZnNJOVotTExRUDE= \
+    # --peer :3000/ckp2eTlJUWl3SGNUbE4= \
+    # --peer :3000/dXMyU3dHYlZOOFNkNHg= \
+
+    # --peer :3000/WnpZcmx1TnI1TjJqYnM= \
+    # --peer :3000/VFRUTWdRN1dXTlJHdUY= \
+    # --peer :3000/MC11Z1NmZTI2YXdIOV8= \
+    # --peer :3000/TlU3ODMwWi01aDdmYjY= \
+    # --peer :3000/dlFzYnA1Mnh6aGtEX0E= \
+
+    # --peer :3000/cnoyWkNkb0h4aG56TXY= \
+    # --peer :3000/UVY0REhtWXlYYmJtZ00= \
+    # --peer :3000/MDNnTk5jbTJ2NUM5ZVg= \
+    # --peer :3000/STQybDBOQlZRTkdNcFk= \
+    # --peer :3000/UzFDbWt5R1g2NFU3V1g= \
+
+    # --peer :3000/S1JvZXdkRHc1c3ZyV3g= \
+    # --peer :3000/aHl5UmNPNUxxLUJjbDk= \
+    # --peer :3000/eEtuQTBFSUZaM2t0VDM= \
+    # --peer :3000/dF80MGR3ejdBU2gyMk8= \
+    # --peer :3000/TUYzaUxPVnE2VFFIX00= \
+    # --peer :3000/dno4My1PZGlUdVhIamk= \
+
+    # --json-log experiments/wallet/wallet.json \
+
+./CardanoCSL.hs -c config.yaml dumplogs
+
+last=`ls experiments/ | grep 2017| sort| tail -1`
+
+tpsfile=tps-new.csv
+
+echo "time,txCount,txType,slotDuration,conc,sendMode,clustersize,startTime,commit,node,run,ntransactions" > $tpsfile
+commit=`grep -oP '(?<=cardano-sl.git --no-check --revision )[0-9a-z]{7}' pkgs/generate.sh`
+conc=`grep -oP '(?<=conc=)[0-9]+' tps-sent.csv`
+slotDuration=`grep -oP '(?<=slotDuration=)[0-9]+' tps-sent.csv`
+sendMode=`grep -oP '(?<=sendMode=)[a-zA-Z]+' tps-sent.csv`
+startTime=`grep -oP '(?<=startTime=)[0-9]+' tps-sent.csv`
+awk 'FNR>2{print $1,$2,$3,slotDuration,conc,sendMode,clustersize,startTime,commit,node,run,ntransactions}' FS=, OFS=, slotDuration=$slotDuration conc=$conc sendMode=$sendMode clustersize=$clustersize startTime=$startTime commit=$commit node="generator" run="$last" ntransactions="$ntransactions" tps-sent.csv >> $tpsfile
+./jq-linux64 -Mr 'select(.event.createdBlock != null) | [.timestamp, (.event.createdBlock.txs | length), (input_filename | scan("node[0-9]+"))] | @csv' experiments/$last/node*json | sort | awk '{print $1,$2,"written",slotDuration,conc,sendMode,clustersize,startTime,commit,$3,run,ntransactions}' FS=, OFS=, slotDuration=$slotDuration conc=$conc sendMode=$sendMode clustersize=$clustersize startTime=$startTime commit=$commit run="$last" ntransactions="$ntransactions" >> $tpsfile
+./jq-linux64 -Mr 'select(.event.memPoolSize != null) | [.timestamp, .event.memPoolSize, (input_filename | scan("node[0-9]+"))] | @csv' experiments/$last/node*json | sort | awk '{print $1,$2,"mempool",slotDuration,conc,sendMode,clustersize,startTime,commit,$3,run,ntransactions}' FS=, OFS=, slotDuration=$slotDuration conc=$conc sendMode=$sendMode clustersize=$clustersize startTime=$startTime commit=$commit run="$last" ntransactions="$ntransactions" >> $tpsfile
+
+
+mv $tpsfile tps-sent.csv "experiments/$last/"
+mv experiments/wallet "experiments/$last/"
+
+echo "time,txCount,txType,slotDuration,conc,sendMode,clustersize,startTime,commit,node,run,ntransactions" > tps-combined.csv
+find experiments -name $tpsfile | xargs awk 'FNR>2{print p}{p=$0}' >> tps-combined.csv
+
+txs=`cat experiments/$last/node.json | ./count_txs.sh`
+
+echo "Txs: $txs"
+echo "Duration: $((end-start))s"
+
+echo "TPS*100: $((txs/(end-start)))"
