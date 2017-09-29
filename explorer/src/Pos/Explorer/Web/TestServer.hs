@@ -60,6 +60,8 @@ explorerHandlers =
     :<|>
       apiAddressSummary
     :<|>
+      apiEpochPageSearch
+    :<|>
       apiEpochSlotSearch
     :<|>
       apiGenesisSummary
@@ -77,6 +79,7 @@ explorerHandlers =
     apiTxsLast            = testTxsLast
     apiTxsSummary         = testTxsSummary
     apiAddressSummary     = testAddressSummary
+    apiEpochPageSearch    = testEpochPageSearch
     apiEpochSlotSearch    = testEpochSlotSearch
     apiGenesisSummary     = testGenesisSummary
     apiGenesisPagesTotal  = testGenesisPagesTotal
@@ -204,16 +207,32 @@ testAddressSummary _  = pure . pure $ sampleAddressSummary
 
 testEpochSlotSearch
     :: EpochIndex
-    -> Maybe Word16
+    -> Word16
     -> Handler (Either ExplorerError [CBlockEntry])
 -- `?epoch=1&slot=1` returns an empty list
-testEpochSlotSearch (EpochIndex 1) (Just 1) =
+testEpochSlotSearch (EpochIndex 1) 1 =
     pure . pure $ []
 -- `?epoch=1&slot=2` returns an error
-testEpochSlotSearch (EpochIndex 1) (Just 2) =
+testEpochSlotSearch (EpochIndex 1) 2 =
     throwM $ Internal "Error while searching epoch/slot"
 -- all others returns a simple result
 testEpochSlotSearch _ _ = pure . pure $ [CBlockEntry
+    { cbeEpoch      = 37294
+    , cbeSlot       = 10
+    , cbeBlkHash    = CHash "75aa93bfa1bf8e6aa913bc5fa64479ab4ffc1373a25c8176b61fa1ab9cbae35d"
+    , cbeTimeIssued = Just posixTime
+    , cbeTxNum      = 0
+    , cbeTotalSent  = mkCCoin $ mkCoin 0
+    , cbeSize       = 390
+    , cbeBlockLead  = Nothing
+    , cbeFees       = mkCCoin $ mkCoin 0
+    }]
+
+testEpochPageSearch
+    :: EpochIndex
+    -> Maybe Int
+    -> Handler (Either ExplorerError [CBlockEntry])
+testEpochPageSearch _ _ = pure . pure $ [CBlockEntry
     { cbeEpoch      = 37294
     , cbeSlot       = 10
     , cbeBlkHash    = CHash "75aa93bfa1bf8e6aa913bc5fa64479ab4ffc1373a25c8176b61fa1ab9cbae35d"
