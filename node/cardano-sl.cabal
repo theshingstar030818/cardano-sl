@@ -576,6 +576,10 @@ test-suite cardano-test
                        Test.Pos.Client.Txp.Util
                        Test.Pos.Client.Txp.UtilSpec
 
+                       -- Explorer
+                       Test.Pos.Explorer.BListenerSpec
+                       Test.Pos.Explorer.Identity.BinarySpec
+
                        -- Everything else
                        Test.Pos.CborSpec
                        Test.Pos.Communication.Identity.BinarySpec
@@ -585,7 +589,6 @@ test-suite cardano-test
                        Test.Pos.CryptoSpec
                        Test.Pos.Delegation.Identity.BinarySpec
                        Test.Pos.DHT.Identity.BinarySpec
-                       Test.Pos.Explorer.Identity.BinarySpec
                        Test.Pos.Genesis.CanonicalSpec
                        Test.Pos.MerkleSpec
                        Test.Pos.Slotting.TypesSpec
