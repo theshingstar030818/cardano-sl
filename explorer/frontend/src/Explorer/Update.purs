@@ -644,7 +644,8 @@ update (RequestEpochPageSearch epochIndex pNumber) state =
 update (ReceiveEpochPageSearch (Right (Tuple totalPages blocks))) state =
     noEffects $
         set loading false $
-        set currentBlocksResult (Success blocks) state
+        set currentBlocksResult (Success blocks) $
+        set (viewStates <<< blocksViewState <<< blsViewMaxPagination) (PageNumber totalPages) state
 
 update (ReceiveEpochPageSearch (Left error)) state =
     noEffects $
