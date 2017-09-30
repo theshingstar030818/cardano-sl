@@ -6,7 +6,7 @@ module Test.Pos.Explorer.BListenerSpec
 
 import           Universum                    hiding ((<>))
 
-import           Data.Map                     (keys)--, elems)
+import           Data.Map                     (keys, elems)
 import qualified Data.List.NonEmpty           as NE
 import           Data.Semigroup               ((<>))
 import           Test.Hspec                   (Spec, describe)
