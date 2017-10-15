@@ -14955,3 +14955,36 @@ testnet_staging_wallet_macos64: &testnet_staging_wallet_macos64
     <<: *mainnet_base_update
     applicationName: csl-daedalus
     systemTag: macos64
+
+# CSL-1793
+
+csl1793:
+  <<: *mainnet_base
+  core:
+    <<: *mainnet_base_core
+    genesis:
+      <<: *mainnet_base_genesis
+      spec:
+        <<: *mainnet_base_spec
+        protocolConstants:
+          <<: *mainnet_base_protocolConstants
+          protocolMagic: 170987650
+          k: 6
+        avvmDistr: *mainnet_avvmDistr
+        initializer:
+          testnetInitializer:
+            testBalance:
+              poors:        200 # should be enough for developers
+              richmen:      4   # this is the number of core nodes,
+                                # set to desired value
+              richmenShare: 0.96
+              totalBalance: 13887504355000000
+              # We need to use HD addresses, because Daedalus can import
+              # only them and some developers may want to test Daedalus.
+              useHDAddresses: True
+            fakeAvvmBalance:
+              count: 100
+              oneBalance: 15000000
+            distribution:
+              testnetRichmenStakeDistr: []
+            seed: 0
