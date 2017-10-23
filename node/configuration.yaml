@@ -14988,3 +14988,12 @@ csl1793:
             distribution:
               testnetRichmenStakeDistr: []
             seed: 0
+
+  update:
+    applicationName: cardano-sl
+    applicationVersion: 1
+    lastKnownBlockVersion:
+      bvMajor: 0
+      bvMinor: 1
+      bvAlt: 0
+    systemTag: none
