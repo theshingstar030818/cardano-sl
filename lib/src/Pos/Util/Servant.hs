@@ -243,6 +243,39 @@ instance HasSwagger (apiType a :> res) =>
     toSwagger _ = toSwagger (Proxy @(apiType a :> res))
 
 -------------------------------------------------------------------------
+-- Rocket science
+-------------------------------------------------------------------------
+
+-- | Entry in api, like `QueryParam`, which indicates we should
+-- rewrite our api on a fly for this argument to more basic entries.
+data CustomParam a
+
+-- | Shortcut for many things we want server to accept
+data MyParamsPack = MyParamsPack (Maybe Int) (Maybe Text) (Maybe ())
+
+-- | To what we want to unwrap `CustomParam MyParamsPack`
+type UnwrappedApiWithParamsPack res =
+       QueryParam "number" Int
+    :> QueryParam "song" Text
+    :> QueryParam "nyan" ()
+    :> res
+
+instance HasServer (UnwrappedApiWithParamsPack res) ctx
+         => HasServer (CustomParam MyParamsPack :> res) ctx where
+
+    -- from the point of view of handlers, it should look like we
+    -- pass just 'MyParamsPack' as parameter
+    type ServerT (CustomParam MyParamsPack :> res) m =
+         MyParamsPack -> ServerT res m
+
+    route =
+        -- delegate to server for @UnwrappedApiWithParamsPack@,
+        -- groupping arguments it accept into one
+        inRouteServer @(UnwrappedApiWithParamsPack res) route $
+        \f number song nyan -> f (MyParamsPack number song nyan)
+
+
+-------------------------------------------------------------------------
 -- Logging
 -------------------------------------------------------------------------
 
