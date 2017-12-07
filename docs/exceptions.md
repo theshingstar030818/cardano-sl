@@ -145,6 +145,7 @@ would make the intention more clear.
 Do *not*:
 
 * use `error` or `impureThrow`
+* use `MonadFail`
 * return `Either Text`
 
 Do:
@@ -213,15 +214,19 @@ Do not import `Control.Exception` or `Control.Monad.Catch`! We use the
 
 ## Resource handling
 
-Use `bracket` or `ResourceT` to guarantee the release of resources. In case of
+Use `bracket` or to guarantee the release of resources. In case of
 concurrent code, avoid `forkIO` or `forkProcess` in favor of the `async`
 package, as it rethrows exceptions from the child threads.
 
+When resource usage is non-linear, it's okay to use `ResourceT`, but prefer
+`bracket` whenever possible.
+
 ## Migration
 
-We should get rid of `Mockable Throw` and `Mockable Catch`, as they buy us
-nothing compared to `MonadThrow` and `MonadCatch` but have less ecosystem
-support -- for instance, the `safe-exceptions` package doesn't use them.
+We should get rid of `Mockable Throw`, `Mockable Catch`, and `Mockable Bracket`,
+as they buy us nothing compared to `MonadThrow`, `MonadCatch`, and `MonadMask`,
+but have less ecosystem support -- for instance, the `safe-exceptions` package
+doesn't use them.
 
 We should identify the parts of the code that use `ExceptT` in impure or
 potentially impure code and replace them with exceptions.
@@ -229,13 +234,28 @@ potentially impure code and replace them with exceptions.
 We should make sure that no code imports `Control.Exception` or
 `Control.Monad.Catch`, and use `Control.Exception.Safe` instead.
 
+We should locate all usages of `forkIO` and replace with appropriate functions
+from `async`.
+
+We should find where errors which are not programmer mistakes are thrown with
+`error`, `undefined`, or `impureThrow`, and rewrite them to use correct error
+handling method. This includes usages of partial functions, such as `read`.
+
+We should find where errors are represented by `Text` and create dedicated data
+types to represent them.
+
+We should find places where preconditions/invariants are not reflected in the
+comments, and add comments.
+
 ### Code references
 
 This list is not exhaustive:
 
 * `TxpGlobalVerifyMode`: https://github.com/input-output-hk/cardano-sl/blob/8507d03ba928e07daea57f9a52f6dc03a9d65779/txp/Pos/Txp/Settings/Global.hs#L37
   -- `MonadError` in potentially impure code
-* ...
+* `MonadRecoveryInfo`:
+  https://github.com/input-output-hk/cardano-sl/blob/d598003ccde5d9848a11c54eec7542b299eb7c44/lib/src/Pos/Recovery/Instance.hs#L30
+  -- `ExceptT` in impure code
 * TBD
 
 ## Literature
