@@ -214,9 +214,10 @@ Do not import `Control.Exception` or `Control.Monad.Catch`! We use the
 
 ## Resource handling
 
-Use `bracket` or to guarantee the release of resources. In case of
-concurrent code, avoid `forkIO` or `forkProcess` in favor of the `async`
-package, as it rethrows exceptions from the child threads.
+Use `bracket` or to guarantee the release of resources. In case of concurrent
+code, avoid `forkIO` or `forkProcess` in favor of the `async` package, as it
+rethrows exceptions from the child threads. (Do not use the function `async`
+itself when you can use `withAsync`, `race`, or `concurrently`).
 
 When resource usage is non-linear, it's okay to use `ResourceT`, but prefer
 `bracket` whenever possible.
