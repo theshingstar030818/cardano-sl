@@ -11,7 +11,7 @@ spec_path="https://raw.githubusercontent.com/input-output-hk/cardano-sl/$TRAVIS_
 validate="curl http://online.swagger.io/validator/debug?url=$spec_path"
 
 echo "Checking swagger spec at $spec_path"
-errors=$(curl $validate 2> /dev/null)
+errors=$(curl --fail $validate)
 
 if [[ $errors == '{}' ]]; then
     echo "Swagger spec is valid"
