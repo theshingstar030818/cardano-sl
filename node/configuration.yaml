@@ -31,7 +31,7 @@ dev: &dev
             seed: 0
         blockVersionData: &dev_core_genesis_spec_blockVersionData
           scriptVersion:     0
-          slotDuration:      7000
+          slotDuration:      20000
           maxBlockSize:      2000000
           maxHeaderSize:     2000000
           maxTxSize:         4096 # 4 Kb
@@ -51,7 +51,7 @@ dev: &dev
               b: 43.946 # additional minimal fees per byte of transaction size
           unlockStakeEpoch: 18446744073709551615 # last epoch (maxBound @Word64)
         protocolConstants: &dev_core_genesis_spec_protocolConstants
-          k: 2
+          k: 2000
           protocolMagic: 55550001
           vssMinTTL: 2
           vssMaxTTL: 6
@@ -112,7 +112,7 @@ dev: &dev
     mdNoBlocksSlotThreshold: 3 # should be less than 2 * k
     lightDlgConfirmationTimeout: 500
     dlgCacheParam: 500
-    recoveryHeadersMessage: 20 # should be greater than k
+    recoveryHeadersMessage: 2100 # should be greater than k
     messageCacheTimeout: 30
     networkConnectionTimeout: 2000
     blockRetrievalQueueSize: 100
