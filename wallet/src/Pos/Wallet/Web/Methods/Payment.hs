@@ -12,6 +12,8 @@ import           Universum
 
 import           Control.Exception                (throw)
 import           Control.Monad.Except             (runExcept)
+import qualified Data.Map                         as M
+import           Ether.Internal                   (HasLens (..))
 import           Formatting                       (sformat, (%))
 import qualified Formatting                       as F
 import           System.Wlog                      (logNotice)
@@ -50,7 +52,8 @@ import           Pos.Wallet.Web.Methods.History   (addHistoryTx, constructCTx,
 import qualified Pos.Wallet.Web.Methods.Logic     as L
 import           Pos.Wallet.Web.Methods.Txp       (coinDistrToOutputs, rewrapTxError,
                                                    submitAndSaveNewPtx)
-import           Pos.Wallet.Web.Mode              (MonadWalletWebMode, WalletWebMode)
+import           Pos.Wallet.Web.Mode              (AddrCIdHashes (..), MonadWalletWebMode,
+                                                   WalletWebMode)
 import           Pos.Wallet.Web.Pending           (mkPendingTx)
 import           Pos.Wallet.Web.State             (AddressLookupMode (Ever, Existing))
 import           Pos.Wallet.Web.Util              (decodeCTypeOrFail,
@@ -150,6 +153,8 @@ sendMoney
     -> m CTx
 sendMoney SendActions{..} passphrase moneySource dstDistr policy = do
     logNotice "Start"
+    hmRef <- unAddrCIdHashes <$> view (lensOf @AddrCIdHashes)
+
     let srcWallet = getMoneySourceWallet moneySource
     rootSk <- getSKById srcWallet
     checkPassMatches passphrase rootSk `whenNothing`
@@ -162,8 +167,16 @@ sendMoney SendActions{..} passphrase moneySource dstDistr policy = do
         throwM (RequestError "Given money source has no addresses!")
 
     logNotice "Stage 2"
-    srcAddrs <- forM addrMetas $ decodeCTypeOrFail . cwamId
+    hm <- liftIO $ readIORef hmRef
+    srcAddrs <- forM addrMetas $ \meta -> do
+        let id = cwamId meta
+        case id `M.lookup` hm of
+           Just addr -> return addr
+           _ -> decodeCTypeOrFail id >>= \addr ->
+                    liftIO (modifyIORef' hmRef (M.insert id addr)) $> addr
+
     logNotice "Stage 2.5"
+
     let metasAndAdrresses = zip (toList addrMetas) (toList srcAddrs)
     allSecrets <- getSecretKeys
 
