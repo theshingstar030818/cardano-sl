@@ -505,7 +505,7 @@ stabilizeTxFee linearPolicy utxo outputs = do
         Nothing -> throwError FailedToStabilize
         Just tx -> pure $ tx & \(S.Min (S.Arg _ txRaw)) -> txRaw
   where
-    firstStageAttempts = 2 * length utxo + 5
+    firstStageAttempts = 2 * (min 200 $ length utxo) + 5
     secondStageAttempts = 10
 
     stabilizeTxFeeDo :: (Bool, Int)
