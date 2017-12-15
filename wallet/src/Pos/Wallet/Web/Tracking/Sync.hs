@@ -497,7 +497,7 @@ decryptAddress (hdPass, wCId) addr = do
     hdPayload <- aaPkDerivationPath $ addrAttributesUnwrapped addr
     derPath <- unpackHDAddressAttr hdPass hdPayload
     guard $ length derPath == 2
-    pure $ CWAddressMeta wCId (derPath !! 0) (derPath !! 1) (addressToCId addr)
+    pure $ CWAddressMeta wCId (derPath !! 0) (derPath !! 1) (addressToCId addr) 0
 
 ----------------------------------------------------------------------------
 -- Cached modifier

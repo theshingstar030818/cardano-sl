@@ -4,16 +4,15 @@ module Test.Pos.Core.AddressSpec
        ( spec
        ) where
 
-import           Universum
+import Universum
 
-import           Test.Hspec            (Spec, describe)
-import           Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
+import Test.Hspec (Spec, describe)
+import Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
 
-import           Pos.Arbitrary.Core    ()
-import           Pos.Core              (IsBootstrapEraAddr (..), makePubKeyAddress,
-                                        makePubKeyHdwAddress)
-import           Pos.Crypto            (PublicKey)
-import           Pos.Crypto.HD         (HDAddressPayload (..))
+import Pos.Arbitrary.Core ()
+import Pos.Core (IsBootstrapEraAddr (..), makePubKeyAddress, makePubKeyHdwAddress)
+import Pos.Crypto (PublicKey)
+import Pos.Crypto.HD (HDAddressPayload (..))
 
 spec :: Spec
 spec = describe "Address" $ modifyMaxSuccess (min 10) $ do
@@ -23,5 +22,5 @@ spec = describe "Address" $ modifyMaxSuccess (min 10) $ do
 pkAndHdwAreShownDifferently :: Bool -> PublicKey -> Bool
 pkAndHdwAreShownDifferently isBootstrap pk =
     show (makePubKeyAddress (IsBootstrapEraAddr isBootstrap) pk) /=
-    (show @_ @Text (makePubKeyHdwAddress (IsBootstrapEraAddr isBootstrap)
+    (show @_ @Text (makePubKeyHdwAddress 0 (IsBootstrapEraAddr isBootstrap)
                     (HDAddressPayload "pataq") pk))
