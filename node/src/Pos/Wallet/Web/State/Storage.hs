@@ -267,7 +267,7 @@ getAccountWAddressesNoSort mode accId =
         cAddresses <- preview (wsAccountInfos . ix accId . which)
         -- here `cAddresses` has type `Maybe CAddresses`
         pure $
-            (map adiCWAddressMeta . map snd . HM.toList)
+            (map adiCWAddressMeta . HM.elems)
             <$> cAddresses
 
 getAccountWAddresses :: AddressLookupMode
