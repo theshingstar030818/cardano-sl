@@ -133,6 +133,8 @@ data CWAddressMeta = CWAddressMeta
       cwamAddressIndex :: Word32
     , -- | Actual address
       cwamId           :: CId Addr
+    , -- | artifical tag
+      cwamTag          :: Int
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 instance Buildable CWAddressMeta where

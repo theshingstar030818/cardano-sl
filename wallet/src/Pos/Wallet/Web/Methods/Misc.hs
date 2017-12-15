@@ -38,6 +38,7 @@ import           Pos.Wallet.WalletMode        (applyLastUpdate, connectedPeers,
 import           Pos.Wallet.Web.ClientTypes   (CProfile (..), CUpdateInfo (..),
                                                SyncProgress (..))
 import           Pos.Wallet.Web.Error         (WalletError (..))
+import           Pos.Wallet.Web.Methods.Logic (addAddressesPack)
 import           Pos.Wallet.Web.Mode          (MonadWalletWebMode)
 import           Pos.Wallet.Web.State         (getNextUpdate, getProfile,
                                                getWalletStorage, removeNextUpdate,
@@ -95,11 +96,12 @@ applyUpdate = removeNextUpdate >> applyLastUpdate
 ----------------------------------------------------------------------------
 
 syncProgress :: MonadWalletWebMode m => m SyncProgress
-syncProgress =
+syncProgress = do
+    addAddressesPack
     SyncProgress
-    <$> localChainDifficulty
-    <*> networkChainDifficulty
-    <*> connectedPeers
+        <$> localChainDifficulty
+        <*> networkChainDifficulty
+        <*> connectedPeers
 
 ----------------------------------------------------------------------------
 -- Reset

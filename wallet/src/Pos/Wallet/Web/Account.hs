@@ -9,6 +9,7 @@ module Pos.Wallet.Web.Account
        , genSaveRootKey
        , genUniqueAccountId
        , genUniqueAddress
+       , genUniqueAddressWithTags
        , deriveAddressSK
        , deriveAddress
        , AccountMode
@@ -26,7 +27,7 @@ import           System.Wlog                (WithLogger)
 import           Universum
 
 import           Pos.Core                   (Address (..), IsBootstrapEraAddr (..),
-                                             deriveLvl2KeyPair)
+                                             deriveLvl2KeyPairMass)
 import           Pos.Crypto                 (EncryptedSecretKey, PassPhrase,
                                              ShouldCheckPassphrase (..), isHardened)
 import           Pos.Util                   (eitherToThrow, maybeThrow)
@@ -93,7 +94,7 @@ getSKByAddressPure
     -> m EncryptedSecretKey
 getSKByAddressPure secrets scp passphrase addrMeta@CWAddressMeta {..} = do
     (addr, addressKey) <-
-            deriveAddressSKPure secrets scp passphrase (addrMetaToAccount addrMeta) cwamAddressIndex
+            deriveAddressSKPure secrets scp passphrase (addrMetaToAccount addrMeta) cwamAddressIndex <&> ($ cwamTag)
     let accCAddr = addressToCId addr
     if accCAddr /= cwamId
              -- if you see this error, maybe you generated public key address with
@@ -172,8 +173,24 @@ genUniqueAddress genSeed passphrase wCAddr@AccountId{..} =
     generateUnique "address generation" genSeed mkAddress notFit
   where
     mkAddress cwamAddressIndex =
-        deriveAddress passphrase wCAddr cwamAddressIndex
+        ($ 0) <$> deriveAddress passphrase wCAddr cwamAddressIndex
     notFit _idx addr = doesWAddressExist Ever addr
+
+genUniqueAddressWithTags
+    :: AccountMode ctx m
+    => [Int]
+    -> AddrGenSeed
+    -> PassPhrase
+    -> AccountId
+    -> m [CWAddressMeta]
+genUniqueAddressWithTags tags genSeed passphrase wCAddr@AccountId{..} =
+    generateUnique "address generation" genSeed mkAddress notFit
+  where
+    mkAddress cwamAddressIndex = do
+        genAddrByTag <- deriveAddress passphrase wCAddr cwamAddressIndex
+        return $ map genAddrByTag tags
+    notFit _idx addrs = fmap and $ mapM (doesWAddressExist Ever) addrs
+
 
 deriveAddressSK
     :: AccountMode ctx m
@@ -181,7 +198,7 @@ deriveAddressSK
     -> PassPhrase
     -> AccountId
     -> Word32
-    -> m (Address, EncryptedSecretKey)
+    -> m (Int -> (Address, EncryptedSecretKey))
 deriveAddressSK scp passphrase accId addressIndex = do
     secrets <- getSecretKeys
     runExceptT (deriveAddressSKPure secrets scp passphrase accId addressIndex) >>= eitherToThrow
@@ -193,11 +210,11 @@ deriveAddressSKPure
     -> PassPhrase
     -> AccountId
     -> Word32
-    -> m (Address, EncryptedSecretKey)
+    -> m (Int -> (Address, EncryptedSecretKey))
 deriveAddressSKPure secrets scp passphrase AccountId {..} addressIndex = do
     key <- getSKByIdPure secrets aiWId
     maybe (throwError badPass) pure $
-        deriveLvl2KeyPair
+        deriveLvl2KeyPairMass
             (IsBootstrapEraAddr True) -- TODO: make it context-dependent!
             scp
             passphrase
@@ -212,13 +229,15 @@ deriveAddress
     => PassPhrase
     -> AccountId
     -> Word32
-    -> m CWAddressMeta
+    -> m (Int -> CWAddressMeta)
 deriveAddress passphrase accId@AccountId{..} cwamAddressIndex = do
-    (addr, _) <- deriveAddressSK (ShouldCheckPassphrase True) passphrase accId cwamAddressIndex
-    let cwamWId         = aiWId
-        cwamAccountIndex = aiIndex
-        cwamId          = addressToCId addr
-    return CWAddressMeta{..}
+    genByTag <- deriveAddressSK (ShouldCheckPassphrase True) passphrase accId cwamAddressIndex
+    return $ \tag ->
+        let cwamWId          = aiWId
+            cwamAccountIndex = aiIndex
+            cwamId           = addressToCId $ fst (genByTag tag)
+            cwamTag          = tag
+        in  CWAddressMeta{..}
 
 -- | Allows to find a key related to given @id@ item.
 class MonadKeySearch id m where
