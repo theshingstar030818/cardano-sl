@@ -119,12 +119,13 @@ For address there are two attributes:
 -}
 
 instance Bi (Attributes AddrAttributes) where
-    encode attrs@(Attributes {attrData = AddrAttributes derivationPath stakeDistr}) =
+    encode attrs@(Attributes {attrData = AddrAttributes derivationPath stakeDistr _}) =
         encodeAttributes listWithIndices attrs
       where
         listWithIndices :: [(Word8, AddrAttributes -> BS.ByteString)]
         listWithIndices =
-            stakeDistributionListWithIndices <> derivationPathListWithIndices
+            stakeDistributionListWithIndices <> derivationPathListWithIndices <> tag'
+        tag' = [(2, serialize' . aaTag)]
         stakeDistributionListWithIndices =
             case stakeDistr of
                 BootstrapEraDistr -> []
@@ -142,11 +143,13 @@ instance Bi (Attributes AddrAttributes) where
             AddrAttributes
             { aaPkDerivationPath = Nothing
             , aaStakeDistribution = BootstrapEraDistr
+            , aaTag = 0
             }
         go n v acc =
             case n of
                 0 -> (\distr -> Just $ acc {aaStakeDistribution = distr }    ) <$> deserialize' v
                 1 -> (\deriv -> Just $ acc {aaPkDerivationPath = Just deriv }) <$> deserialize' v
+                2 -> (\tag -> Just $ acc {aaTag = tag}) <$> deserialize' v
                 _ -> pure Nothing
 
 -- We don't need a special encoding for 'Address'', GND is what we want.

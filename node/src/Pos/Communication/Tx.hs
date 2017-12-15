@@ -14,7 +14,6 @@ module Pos.Communication.Tx
 import           Formatting                 (build, sformat, (%))
 import           Mockable                   (MonadMockable)
 import           System.Wlog                (logInfo)
-import           System.Wlog                (logDebug)
 import           Universum
 
 import           Pos.Binary                 ()

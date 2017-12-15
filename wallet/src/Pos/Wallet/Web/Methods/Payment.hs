@@ -13,10 +13,8 @@ import           Universum
 import           Control.Exception                (throw)
 import           Control.Monad.Except             (runExcept)
 import           Data.Time.Units                  (Second)
-import           Formatting                       (sformat, (%))
-import qualified Formatting                       as F
 import           Mockable                         (concurrently, delay)
-import           System.Wlog                      (logDebug, logInfo)
+import           System.Wlog                      (logDebug)
 
 import           Pos.Aeson.ClientTypes            ()
 import           Pos.Aeson.WalletBackup           ()
@@ -26,7 +24,7 @@ import           Pos.Client.Txp.History           (TxHistoryEntry (..))
 import           Pos.Client.Txp.Util              (computeTxFee, runTxCreator)
 import           Pos.Communication                (SendActions (..), prepareMTx)
 import           Pos.Configuration                (HasNodeConfiguration)
-import           Pos.Core                         (Coin, HasConfiguration, addressF,
+import           Pos.Core                         (Coin, HasConfiguration,
                                                    getCurrentTimestamp)
 import           Pos.Crypto                       (PassPhrase, ShouldCheckPassphrase (..),
                                                    checkPassMatches, hash,
@@ -178,7 +176,8 @@ sendMoney SendActions{..} passphrase moneySource dstDistr = do
 
     relatedAccount <- getSomeMoneySourceAccount moneySource
     outputs <- coinDistrToOutputs dstDistr
-    (th, dstAddrs) <-
+
+    (th, _) <-
         rewrapTxError "Cannot send transaction" $ do
             logDebug "sendMoney: we're to prepareMTx"
             (txAux, inpTxOuts') <-
@@ -197,18 +196,8 @@ sendMoney SendActions{..} passphrase moneySource dstDistr = do
             logDebug "sendMoney: performed mkPendingTx"
             (th, dstAddrs) <$ submitAndSaveNewPtx enqueueMsg ptx
 
-    logInfo $
-        sformat ("Successfully spent money from "%
-                    listF ", " addressF % " addresses on " %
-                    listF ", " addressF)
-        (toList srcAddrs)
-        dstAddrs
-
     addHistoryTx srcWallet th
     srcWalletAddrs <- getWalletAddrsSet Ever srcWallet
     diff <- getCurChainDifficulty
-    fst <$> constructCTx srcWallet srcWalletAddrs diff th
-  where
-     -- TODO eliminate copy-paste
-     listF separator formatter =
-         F.later $ fold . intersperse separator . fmap (F.bprint formatter)
+    res <- fst <$> constructCTx srcWallet srcWalletAddrs diff th
+    return res
