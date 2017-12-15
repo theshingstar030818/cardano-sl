@@ -23,13 +23,12 @@ import           Pos.Util.Util              (maybeThrow)
 import           Pos.Wallet.Web.Assurance   (AssuranceLevel (HighAssurance),
                                              assuredBlockDepth)
 import           Pos.Wallet.Web.ClientTypes (AccountId (..), Addr, CId,
-                                             CWAddressMeta (..), Wal,
-                                             cwAssurance)
+                                             CWAddressMeta (..), Wal, cwAssurance)
 
 
 import           Pos.Wallet.Web.Error       (WalletError (..))
 import           Pos.Wallet.Web.State       (AddressLookupMode, WebWalletModeDB,
-                                             getAccountIds, getAccountWAddresses,
+                                             getAccountIds, getAccountWAddressesNoSort,
                                              getWalletMeta)
 
 getWalletAccountIds :: WebWalletModeDB ctx m => CId Wal -> m [AccountId]
@@ -39,7 +38,7 @@ getAccountAddrsOrThrow
     :: (WebWalletModeDB ctx m, MonadThrow m)
     => AddressLookupMode -> AccountId -> m [CWAddressMeta]
 getAccountAddrsOrThrow mode accId =
-    getAccountWAddresses mode accId >>= maybeThrow noWallet
+    getAccountWAddressesNoSort mode accId >>= maybeThrow noWallet
   where
     noWallet =
         RequestError $

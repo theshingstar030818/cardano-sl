@@ -20,12 +20,14 @@ module Pos.Wallet.Web.State.State
        , getAccountMetas
        , getAccountMeta
        , getAccountWAddresses
+       , getAccountWAddressesNoSort
        , getWalletMetas
        , getWalletMeta
        , getWalletMetaIncludeUnready
        , getWalletPassLU
        , getWalletSyncTip
        , getWalletAddresses
+       , getWalletAddressesNoSort
        , doesWAddressExist
        , getTxMeta
        , getWalletTxHistory
@@ -137,6 +139,9 @@ getAccountMetas = queryDisk A.GetAccountMetas
 getAccountMeta :: WebWalletModeDB ctx m => AccountId -> m (Maybe CAccountMeta)
 getAccountMeta = queryDisk . A.GetAccountMeta
 
+getWalletAddressesNoSort :: WebWalletModeDB ctx m => m [CId Wal]
+getWalletAddressesNoSort = queryDisk A.GetWalletAddressesNoSort
+
 getWalletAddresses :: WebWalletModeDB ctx m => m [CId Wal]
 getWalletAddresses = queryDisk A.GetWalletAddresses
 
@@ -154,6 +159,11 @@ getWalletPassLU = queryDisk . A.GetWalletPassLU
 
 getWalletSyncTip :: WebWalletModeDB ctx m => CId Wal -> m (Maybe WalletTip)
 getWalletSyncTip = queryDisk . A.GetWalletSyncTip
+
+getAccountWAddressesNoSort
+    :: WebWalletModeDB ctx m
+    => AddressLookupMode -> AccountId -> m (Maybe [CWAddressMeta])
+getAccountWAddressesNoSort mode = queryDisk . A.GetAccountWAddressesNoSort mode
 
 getAccountWAddresses
     :: WebWalletModeDB ctx m

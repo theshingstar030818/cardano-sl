@@ -29,7 +29,9 @@ module Pos.Wallet.Web.State.Storage
        , getWalletPassLU
        , getWalletSyncTip
        , getWalletAddresses
+       , getWalletAddressesNoSort
        , getAccountWAddresses
+       , getAccountWAddressesNoSort
        , doesWAddressExist
        , getTxMeta
        , getUpdates
@@ -243,10 +245,30 @@ getWalletPassLU cWalId = preview (wsWalletInfos . ix cWalId . wiPassphraseLU)
 getWalletSyncTip :: CId Wal -> Query (Maybe WalletTip)
 getWalletSyncTip cWalId = preview (wsWalletInfos . ix cWalId . wiSyncTip)
 
+getWalletAddressesNoSort :: Query [CId Wal]
+getWalletAddressesNoSort =
+    map fst . filter (view wiIsReady . snd) . HM.toList <$>
+    view wsWalletInfos
+
 getWalletAddresses :: Query [CId Wal]
 getWalletAddresses =
     map fst . sortOn (view wiCreationTime . snd) . filter (view wiIsReady . snd) . HM.toList <$>
     view wsWalletInfos
+
+getAccountWAddressesNoSort
+    :: AddressLookupMode
+    -> AccountId
+    -> Query (Maybe [CWAddressMeta])
+getAccountWAddressesNoSort mode accId =
+    withAccLookupMode mode (fetch aiAddresses) (fetch aiRemovedAddresses)
+  where
+    fetch :: MonadReader WalletStorage m => Lens' AccountInfo CAddresses -> m (Maybe [CWAddressMeta])
+    fetch which = do
+        cAddresses <- preview (wsAccountInfos . ix accId . which)
+        -- here `cAddresses` has type `Maybe CAddresses`
+        pure $
+            (map adiCWAddressMeta . map snd . HM.toList)
+            <$> cAddresses
 
 getAccountWAddresses :: AddressLookupMode
                   -> AccountId

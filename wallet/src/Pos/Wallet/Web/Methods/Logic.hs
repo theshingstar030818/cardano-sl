@@ -54,7 +54,7 @@ import           Pos.Wallet.Web.State         (AddressLookupMode (Existing),
                                                CustomAddressType (ChangeAddr, UsedAddr),
                                                addWAddress, createAccount, createWallet,
                                                getAccountIds, getAccountMeta,
-                                               getWalletAddresses,
+                                               getWalletAddressesNoSort,
                                                getWalletMetaIncludeUnready,
                                                getWalletPassLU, isCustomAddress,
                                                removeAccount, removeHistoryCache,
@@ -175,7 +175,7 @@ getWallet :: MonadWalletWebMode m => CId Wal -> m CWallet
 getWallet = getWalletIncludeUnready False
 
 getWallets :: MonadWalletWebMode m => m [CWallet]
-getWallets = getWalletAddresses >>= mapM getWallet
+getWallets = getWalletAddressesNoSort >>= mapM getWallet
 
 ----------------------------------------------------------------------------
 -- Creators
