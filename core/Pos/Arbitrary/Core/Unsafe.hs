@@ -4,17 +4,17 @@ module Pos.Arbitrary.Core.Unsafe () where
 
 import           Universum
 
-import           Pos.Arbitrary.Core          ()
-import           Pos.Arbitrary.Crypto.Unsafe ()
-import           Pos.Binary.Crypto           ()
+import           Pos.Arbitrary.Core              ()
+import           Pos.Arbitrary.Crypto.Unsafe     ()
+import           Pos.Binary.Crypto               ()
+import           Pos.Core                        (AddrAttributes (..),
+                                                  AddrStakeDistribution (..),
+                                                  AddrType (..), Address (..), Coin,
+                                                  EpochIndex (..), LocalSlotIndex,
+                                                  SharedSeed (..), SlotId (..), mkCoin)
 import           Pos.Core.Configuration.Protocol (HasProtocolConstants)
-import           Pos.Core                    (AddrAttributes (..),
-                                              AddrStakeDistribution (..), AddrType (..),
-                                              Address (..), Coin, EpochIndex (..),
-                                              LocalSlotIndex,
-                                              SharedSeed (..), SlotId (..), mkCoin)
-import           Pos.Data.Attributes         (mkAttributes)
-import           Pos.Util.Arbitrary          (ArbitraryUnsafe (..))
+import           Pos.Data.Attributes             (mkAttributes)
+import           Pos.Util.Arbitrary              (ArbitraryUnsafe (..))
 
 deriving instance ArbitraryUnsafe SharedSeed
 deriving instance ArbitraryUnsafe EpochIndex
@@ -32,6 +32,7 @@ instance ArbitraryUnsafe Address where
                 AddrAttributes
                 { aaPkDerivationPath = Nothing
                 , aaStakeDistribution = BootstrapEraDistr
+                , aaTag = 0
                 }
         let addrType = ATPubKey
         return Address {..}

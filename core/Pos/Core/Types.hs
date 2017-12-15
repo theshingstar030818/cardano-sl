@@ -199,6 +199,7 @@ mkMultiKeyDistr distrMap = UnsafeMultiKeyDistr distrMap <$ check
 data AddrAttributes = AddrAttributes
     { aaPkDerivationPath  :: !(Maybe HDAddressPayload)
     , aaStakeDistribution :: !AddrStakeDistribution
+    , aaTag               :: !Int
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 -- | Hash of this data is stored in 'Address'. This type exists mostly

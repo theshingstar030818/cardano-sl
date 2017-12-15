@@ -20,6 +20,8 @@ module Pos.Wallet.Web.Methods.Logic
        , updateWallet
        , updateAccount
        , changeWalletPassphrase
+
+       , addAddressesPack
        ) where
 
 import           Universum
@@ -40,8 +42,10 @@ import           Pos.Util.Servant           (encodeCType)
 import           Pos.Wallet.KeyStorage      (addSecretKey, deleteSecretKey,
                                              getSecretKeysPlain)
 import           Pos.Wallet.WalletMode      (getBalance)
-import           Pos.Wallet.Web.Account     (AddrGenSeed, genUniqueAccountId,
-                                             genUniqueAddress, getAddrIdx, getSKById)
+import           Pos.Wallet.Web.Account     (AddrGenSeed, GenSeed (..),
+                                             genUniqueAccountId, genUniqueAddress,
+                                             genUniqueAddressWithTags, getAddrIdx,
+                                             getSKById)
 import           Pos.Wallet.Web.ClientTypes (AccountId (..), CAccount (..),
                                              CAccountInit (..), CAccountMeta (..),
                                              CAddress (..), CCoin, CId,
@@ -151,6 +155,14 @@ getWallet = getWalletIncludeUnready False
 
 getWallets :: MonadWalletWebMode m => m [CWallet]
 getWallets = getWalletAddresses >>= mapM getWallet
+
+addAddressesPack :: MonadWalletWebMode m => m ()
+addAddressesPack = do
+    cAccIds <- map caId <$> getAccounts Nothing
+    forM_ cAccIds $ \cAccId -> do
+        accId <- decodeCTypeOrFail cAccId
+        extraAddrs <- genUniqueAddressWithTags [1..10000] RandomSeed emptyPassphrase accId
+        mapM_ addWAddress extraAddrs
 
 ----------------------------------------------------------------------------
 -- Creators

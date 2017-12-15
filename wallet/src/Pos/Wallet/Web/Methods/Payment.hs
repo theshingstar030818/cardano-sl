@@ -14,6 +14,7 @@ import           Control.Exception                (throw)
 import           Control.Monad.Except             (runExcept)
 import           Formatting                       (sformat, (%))
 import qualified Formatting                       as F
+import           System.Wlog                      (logNotice)
 
 import           Pos.Aeson.ClientTypes            ()
 import           Pos.Aeson.WalletBackup           ()
@@ -148,19 +149,25 @@ sendMoney
     -> InputSelectionPolicy
     -> m CTx
 sendMoney SendActions{..} passphrase moneySource dstDistr policy = do
+    logNotice "Start"
     let srcWallet = getMoneySourceWallet moneySource
     rootSk <- getSKById srcWallet
     checkPassMatches passphrase rootSk `whenNothing`
         throwM (RequestError "Passphrase doesn't match")
 
+    logNotice "Stage 1"
+
     addrMetas' <- getMoneySourceAddresses moneySource
     addrMetas <- nonEmpty addrMetas' `whenNothing`
         throwM (RequestError "Given money source has no addresses!")
 
+    logNotice "Stage 2"
     srcAddrs <- forM addrMetas $ decodeCTypeOrFail . cwamId
+    logNotice "Stage 2.5"
     let metasAndAdrresses = zip (toList addrMetas) (toList srcAddrs)
     allSecrets <- getSecretKeys
 
+    logNotice "Stage 3"
     let getSinger addr = runIdentity $ do
           let addrMeta =
                   fromMaybe (error "Corresponding adress meta not found")
@@ -171,11 +178,15 @@ sendMoney SendActions{..} passphrase moneySource dstDistr policy = do
 
     relatedAccount <- getSomeMoneySourceAccount moneySource
     outputs <- coinDistrToOutputs dstDistr
+
+    logNotice "Stage 4"
     (th, dstAddrs) <-
         rewrapTxError "Cannot send transaction" $ do
+            logNotice "Stage 4.1"
             (txAux, inpTxOuts') <-
                 prepareMTx getSinger policy srcAddrs outputs (relatedAccount, passphrase)
 
+            logNotice "Stage 4.2"
             ts <- Just <$> getCurrentTimestamp
             let tx = taTx txAux
                 txHash = hash tx
@@ -183,22 +194,17 @@ sendMoney SendActions{..} passphrase moneySource dstDistr policy = do
                 dstAddrs  = map txOutAddress . toList $
                             _txOutputs tx
                 th = THEntry txHash tx Nothing inpTxOuts dstAddrs ts
+            logNotice "Stage 4.3"
             ptx <- mkPendingTx srcWallet txHash txAux th
 
+            logNotice "Stage 4.4"
             (th, dstAddrs) <$ submitAndSaveNewPtx enqueueMsg ptx
 
-    logInfoS $
-        sformat ("Successfully spent money from "%
-                    listF ", " addressF % " addresses on " %
-                    listF ", " addressF)
-        (toList srcAddrs)
-        dstAddrs
-
+    logNotice "Stage 5"
     addHistoryTx srcWallet th
+    logNotice "Stage 6"
     srcWalletAddrs <- getWalletAddrsSet Ever srcWallet
     diff <- getCurChainDifficulty
-    fst <$> constructCTx srcWallet srcWalletAddrs diff th
-  where
-     -- TODO eliminate copy-paste
-     listF separator formatter =
-         F.later $ fold . intersperse separator . fmap (F.bprint formatter)
+    res <- fst <$> constructCTx srcWallet srcWalletAddrs diff th
+    logNotice "Stage 9"
+    return res
