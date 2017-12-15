@@ -57,8 +57,8 @@ import           Pos.Wallet.Web.Mode        (MonadWalletWebMode)
 import           Pos.Wallet.Web.State       (AddressLookupMode (Existing),
                                              CustomAddressType (ChangeAddr, UsedAddr),
                                              addWAddress, createAccount, createWallet,
-                                             getAccountIds, getAccountMeta,
-                                             getWalletAddresses,
+                                             doesAccountExist, getAccountIds,
+                                             getAccountMeta, getWalletAddresses,
                                              getWalletMetaIncludeUnready, getWalletPassLU,
                                              isCustomAddress, removeAccount,
                                              removeHistoryCache, removeTxMetas,
@@ -177,11 +177,15 @@ newAddress
 newAddress addGenSeed passphrase accId =
     fixCachedAccModifierFor accId $ \accMod -> do
         -- check whether account exists
-        _ <- getAccount accMod accId
+        parentExists <- doesAccountExist accId
+        unless parentExists $ throwM noAccount
 
         cAccAddr <- genUniqueAddress addGenSeed passphrase accId
         addWAddress cAccAddr
         getWAddress accMod cAccAddr
+  where
+    noAccount =
+        RequestError $ sformat ("No account with id "%build%" found") accId
 
 newAccountIncludeUnready
     :: MonadWalletWebMode m
