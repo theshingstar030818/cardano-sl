@@ -27,7 +27,8 @@ module Pos.Wallet.Web.Methods.Logic
 import           Universum
 
 import qualified Data.HashMap.Strict        as HM
-import           Data.List                  (findIndex, notElem)
+import           Data.List                  (findIndex)
+import qualified Data.Set                   as S
 import           Data.Time.Clock.POSIX      (getPOSIXTime)
 import           Formatting                 (build, sformat, (%))
 
@@ -111,9 +112,9 @@ getAccount accMod accId = do
         RequestError $ sformat ("No account with id "%build%" found") accId
     gatherAddresses addrModifier dbAddrs = do
         let memAddrs = sortedInsertions addrModifier
+            dbAddrsSet = S.fromList dbAddrs
             relatedMemAddrs = filter ((== accId) . addrMetaToAccount) memAddrs
-            -- @|relatedMemAddrs|@ is O(1) while @dbAddrs@ is large
-            unknownMemAddrs = filter (`notElem` dbAddrs) relatedMemAddrs
+            unknownMemAddrs = filter (`S.notMember` dbAddrsSet) relatedMemAddrs
         dbAddrs <> unknownMemAddrs
 
 getAccountsIncludeUnready
