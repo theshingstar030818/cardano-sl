@@ -195,10 +195,14 @@ sendMoney SendActions{..} passphrase moneySource dstDistr = do
             ptx <- mkPendingTx srcWallet txHash txAux th
 
             logDebug "sendMoney: performed mkPendingTx"
-            (th, dstAddrs) <$ submitAndSaveNewPtx enqueueMsg ptx
+            submitAndSaveNewPtx enqueueMsg ptx
+            logDebug "sendMoney: submitted and saved tx"
+
+            return (th, dstAddrs)
 
     addHistoryTx srcWallet th
     srcWalletAddrs <- getWalletAddrsSet Ever srcWallet
     diff <- getCurChainDifficulty
-    res <- fst <$> constructCTx srcWallet srcWalletAddrs diff th
-    return res
+
+    logDebug "sendMoney: constructing response"
+    fst <$> constructCTx srcWallet srcWalletAddrs diff th
