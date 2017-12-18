@@ -180,7 +180,7 @@ sendMoney SendActions{..} passphrase moneySource dstDistr = do
     th <- rewrapTxError "Cannot send transaction" $ do
         logDebug "sendMoney: we're to prepareMTx"
         (txAux, inpTxOuts') <-
-            prepareMTx getSinger srcAddrs outputs (relatedAccount, passphrase)
+            prepareMTx getOwnUtxos getSinger srcAddrs outputs (relatedAccount, passphrase)
         logDebug "sendMoney: performed prepareMTx"
 
         ts <- Just <$> getCurrentTimestamp
