@@ -152,7 +152,8 @@ Do:
 
 * return `Either ErrorADT`, `Maybe`
 * wrap the underlying (pure!) monad in `ExceptT` or `CatchT`
-* use `MonadError` or `MonadThrow`
+* use `MonadError` or `MonadThrow` (methods of these classes). Note
+  that if you define `f :: MonadError m => m ()`, it won't be pure
 
 Consider parsing: it is pure, but we cannot make assumptions about the input. In
 this case we might want to use `ExceptT ParseError`. Or consider a lookup in a
@@ -168,7 +169,7 @@ ADT. In case creating a proper ADT feels too cumbersome, use `CatchT`, which
 is equivalent to `ExceptT SomeException`.
 
 Be careful not to use `MaybeT`, `ExceptT`, and `CatchT` in potentially impure
-code. When in doubt whether the code is potentially impure, use `MonadThrow`.  
+code. When in doubt whether the code is potentially impure, use `MonadThrow`.
 (The reason we don't want `ExceptT` and co. in potentially impure code is that
 they add additional exception mechanisms to the one that `IO` has, and
 `catch`/`bracket` don't account for this).
@@ -231,6 +232,10 @@ doesn't use them.
 
 We should identify the parts of the code that use `ExceptT` in impure or
 potentially impure code and replace them with exceptions.
+
+We should identify the parts of the code that use `MonadError` in
+potentially impure code which can be replaced with simple `Either` and
+do this replacement.
 
 We should make sure that no code imports `Control.Exception` or
 `Control.Monad.Catch`, and use `Control.Exception.Safe` instead.
