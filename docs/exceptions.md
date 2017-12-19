@@ -230,12 +230,21 @@ as they buy us nothing compared to `MonadThrow`, `MonadCatch`, and `MonadMask`,
 but have less ecosystem support -- for instance, the `safe-exceptions` package
 doesn't use them.
 
-We should identify the parts of the code that use `ExceptT` in impure or
-potentially impure code and replace them with exceptions.
+We should identify the parts of the code that use `ExceptT` or
+`MonadError` in impure or potentially impure code and replace them
+with exceptions. If code can be made pure by replacing `MonadError`
+with simple `Either`, we should do this replacement. For instance,
+`mkMultiKeyDistr :: MonadError Text m => Map StakeholderId CoinPortion
+-> m AddrStakeDistribution` becomes `mkMultiKeyDistr :: Map
+StakeholderId CoinPortion -> Either Text AddrStakeDistribution`
 
-We should identify the parts of the code that use `MonadError` in
-potentially impure code which can be replaced with simple `Either` and
-do this replacement.
+We should get rid of `MonadFail` usages everywhere except places where
+it's required by external API. For instance, `mkTx :: MonadFail m =>
+NonEmpty TxIn -> NonEmpty TxOut -> TxAttributes -> m Tx` should be
+changed to `mkTx :: NonEmpty TxIn -> NonEmpty TxOut -> TxAttributes ->
+Either Text Tx`. We can use `eitherToFail` helper function if we want
+to use this function inside a monad from external library which uses
+`MonadFail` to fail.
 
 We should make sure that no code imports `Control.Exception` or
 `Control.Monad.Catch`, and use `Control.Exception.Safe` instead.
