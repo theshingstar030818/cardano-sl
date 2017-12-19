@@ -1,3 +1,4 @@
+{-# LANGUAGE Rank2Types   #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Pos.Wallet.Web.State.State
@@ -15,6 +16,8 @@ module Pos.Wallet.Web.State.State
        , CustomAddressType (..)
 
        -- * Getters
+       , WalletSnapshot
+       , getWalletSnapshot
        , getProfile
        , doesAccountExist
        , getAccountIds
@@ -77,7 +80,6 @@ module Pos.Wallet.Web.State.State
        , casPtxCondition
        , ptxUpdateMeta
        , addOnlyNewPendingTx
-       , getWalletStorage
        , flushWalletStorage
        ) where
 
@@ -101,6 +103,7 @@ import           Pos.Wallet.Web.Pending.Types (PendingTx (..), PtxCondition)
 import           Pos.Wallet.Web.State.Acidic  (WalletState, closeState, openMemState,
                                                openState)
 import           Pos.Wallet.Web.State.Acidic  as A
+import qualified Pos.Wallet.Web.State.Storage as S
 import           Pos.Wallet.Web.State.Storage (AddressLookupMode (..),
                                                CustomAddressType (..), PtxMetaUpdate (..),
                                                WalletBalances, WalletStorage,
@@ -123,11 +126,17 @@ type WebWalletModeDB ctx m =
     , HasConfiguration
     )
 
+type WalletSnapshot = WalletStorage
+
 queryDisk
     :: (EventState event ~ WalletStorage, QueryEvent event,
         MonadWalletWebDB ctx m, MonadIO m)
     => event -> m (EventResult event)
 queryDisk e = getWalletWebState >>= flip A.query e
+
+queryValue
+    :: WalletStorage -> S.Query a -> a
+queryValue ws q = runReader q ws
 
 updateDisk
     :: (EventState event ~ WalletStorage, UpdateEvent event,
@@ -135,81 +144,92 @@ updateDisk
     => event -> m (EventResult event)
 updateDisk e = getWalletWebState >>= flip A.update e
 
-doesAccountExist :: WebWalletModeDB ctx m => AccountId -> m Bool
-doesAccountExist = queryDisk . A.DoesAccountExist
+-- | All queries work by doing a /single/ read of the DB state and then
+-- by using pure functions to extract the relevant information. A single read
+-- guarantees that we see a self-consistent snapshot of the wallet state.
+--
+getWalletSnapshot :: WebWalletModeDB ctx m => m WalletSnapshot
+getWalletSnapshot = queryDisk A.GetWalletStorage
 
-getAccountIds :: WebWalletModeDB ctx m => m [AccountId]
-getAccountIds = queryDisk A.GetAccountIds
+doesAccountExist :: WalletSnapshot -> AccountId -> Bool
+doesAccountExist ws accid = queryValue ws (S.doesAccountExist accid)
 
-getAccountMetas :: WebWalletModeDB ctx m => m [CAccountMeta]
-getAccountMetas = queryDisk A.GetAccountMetas
+getAccountIds :: WalletSnapshot -> [AccountId]
+getAccountIds ws = queryValue ws S.getAccountIds
 
-getAccountMeta :: WebWalletModeDB ctx m => AccountId -> m (Maybe CAccountMeta)
-getAccountMeta = queryDisk . A.GetAccountMeta
+getAccountMetas :: WalletSnapshot -> [CAccountMeta]
+getAccountMetas ws = queryValue ws S.getAccountMetas
 
-getWalletAddresses :: WebWalletModeDB ctx m => m [CId Wal]
-getWalletAddresses = queryDisk A.GetWalletAddresses
+getAccountMeta :: WalletSnapshot -> AccountId -> Maybe CAccountMeta
+getAccountMeta ws accid = queryValue ws (S.getAccountMeta accid)
 
-getWalletMeta :: WebWalletModeDB ctx m => CId Wal -> m (Maybe CWalletMeta)
-getWalletMeta = queryDisk . A.GetWalletMeta
+getWalletAddresses :: WalletSnapshot -> [CId Wal]
+getWalletAddresses ws = queryValue ws S.getWalletAddresses
 
-getWalletMetaIncludeUnready :: WebWalletModeDB ctx m => Bool -> CId Wal -> m (Maybe CWalletMeta)
-getWalletMetaIncludeUnready includeReady = queryDisk . A.GetWalletMetaIncludeUnready includeReady
+getWalletMeta :: WalletSnapshot -> CId Wal -> Maybe CWalletMeta
+getWalletMeta ws wid = queryValue ws (S.getWalletMeta wid)
 
-getWalletMetas :: WebWalletModeDB ctx m => m ([CWalletMeta])
-getWalletMetas = queryDisk A.GetWalletMetas
+getWalletMetaIncludeUnready
+    :: WalletSnapshot -> Bool -> CId Wal -> Maybe CWalletMeta
+getWalletMetaIncludeUnready ws includeReady wid =
+    queryValue ws (S.getWalletMetaIncludeUnready includeReady wid)
 
-getWalletPassLU :: WebWalletModeDB ctx m => CId Wal -> m (Maybe PassPhraseLU)
-getWalletPassLU = queryDisk . A.GetWalletPassLU
+getWalletMetas :: WalletSnapshot -> [CWalletMeta]
+getWalletMetas ws = queryValue ws S.getWalletMetas
 
-getWalletSyncTip :: WebWalletModeDB ctx m => CId Wal -> m (Maybe WalletTip)
-getWalletSyncTip = queryDisk . A.GetWalletSyncTip
+getWalletPassLU :: WalletSnapshot -> CId Wal -> Maybe PassPhraseLU
+getWalletPassLU ws wid = queryValue ws (S.getWalletPassLU wid)
+
+getWalletSyncTip :: WalletSnapshot -> CId Wal -> Maybe WalletTip
+getWalletSyncTip ws wid = queryValue ws (S.getWalletSyncTip wid)
 
 getAccountWAddresses
-    :: WebWalletModeDB ctx m
-    => AddressLookupMode -> AccountId -> m (Maybe [CWAddressMeta])
-getAccountWAddresses mode = queryDisk . A.GetAccountWAddresses mode
+    :: WalletSnapshot -> AddressLookupMode -> AccountId -> Maybe [CWAddressMeta]
+getAccountWAddresses ws mode wid =
+    queryValue ws (S.getAccountWAddresses mode wid)
 
 doesWAddressExist
-    :: WebWalletModeDB ctx m
-    => AddressLookupMode -> CWAddressMeta -> m Bool
-doesWAddressExist mode = queryDisk . A.DoesWAddressExist mode
+    :: WalletSnapshot -> AddressLookupMode -> CWAddressMeta -> Bool
+doesWAddressExist ws mode addr = queryValue ws (S.doesWAddressExist mode addr)
 
-getProfile :: WebWalletModeDB ctx m => m CProfile
-getProfile = queryDisk A.GetProfile
+getProfile :: WalletSnapshot -> CProfile
+getProfile ws = queryValue ws S.getProfile
 
-getTxMeta :: WebWalletModeDB ctx m => CId Wal -> CTxId -> m (Maybe CTxMeta)
-getTxMeta cWalId = queryDisk . A.GetTxMeta cWalId
+getTxMeta :: WalletSnapshot -> CId Wal -> CTxId -> Maybe CTxMeta
+getTxMeta ws wid txid = queryValue ws (S.getTxMeta wid txid)
 
-getWalletTxHistory :: WebWalletModeDB ctx m => CId Wal -> m (Maybe [CTxMeta])
-getWalletTxHistory = queryDisk . A.GetWalletTxHistory
+getWalletTxHistory :: WalletSnapshot -> CId Wal -> Maybe [CTxMeta]
+getWalletTxHistory ws wid = queryValue ws (S.getWalletTxHistory wid)
 
-getUpdates :: WebWalletModeDB ctx m => m [CUpdateInfo]
-getUpdates = queryDisk A.GetUpdates
+getUpdates :: WalletSnapshot -> [CUpdateInfo]
+getUpdates ws = queryValue ws S.getUpdates
 
-getNextUpdate :: WebWalletModeDB ctx m => m (Maybe CUpdateInfo)
-getNextUpdate = queryDisk A.GetNextUpdate
+getNextUpdate :: WalletSnapshot -> Maybe CUpdateInfo
+getNextUpdate ws = queryValue ws S.getNextUpdate
 
-getHistoryCache :: WebWalletModeDB ctx m => CId Wal -> m (Maybe (Map TxId TxHistoryEntry))
-getHistoryCache = queryDisk . A.GetHistoryCache
+getHistoryCache :: WalletSnapshot -> CId Wal -> Maybe (Map TxId TxHistoryEntry)
+getHistoryCache ws wid = queryValue ws (S.getHistoryCache wid)
 
-getCustomAddresses :: WebWalletModeDB ctx m => CustomAddressType -> m [CId Addr]
-getCustomAddresses = queryDisk ... A.GetCustomAddresses
+getCustomAddresses :: WalletSnapshot -> CustomAddressType -> [CId Addr]
+getCustomAddresses ws addrtype = queryValue ws (S.getCustomAddresses addrtype)
 
-getCustomAddress :: WebWalletModeDB ctx m => CustomAddressType -> CId Addr -> m (Maybe HeaderHash)
-getCustomAddress = queryDisk ... A.GetCustomAddress
+getCustomAddress
+    :: WalletSnapshot -> CustomAddressType -> CId Addr -> Maybe HeaderHash
+getCustomAddress ws addrtype addrid =
+    queryValue ws (S.getCustomAddress addrtype addrid)
 
-isCustomAddress :: WebWalletModeDB ctx m => CustomAddressType -> CId Addr -> m Bool
-isCustomAddress = fmap isJust . queryDisk ... A.GetCustomAddress
+isCustomAddress :: WalletSnapshot -> CustomAddressType -> CId Addr -> Bool
+isCustomAddress ws addrtype addrid =
+    isJust (getCustomAddress ws addrtype addrid)
 
-getPendingTxs :: WebWalletModeDB ctx m => m [PendingTx]
-getPendingTxs = queryDisk ... A.GetPendingTxs
+getPendingTxs :: WalletSnapshot -> [PendingTx]
+getPendingTxs ws = queryValue ws S.getPendingTxs
 
-getWalletPendingTxs :: WebWalletModeDB ctx m => CId Wal -> m (Maybe [PendingTx])
-getWalletPendingTxs = queryDisk ... A.GetWalletPendingTxs
+getWalletPendingTxs :: WalletSnapshot -> CId Wal -> Maybe [PendingTx]
+getWalletPendingTxs ws wid = queryValue ws (S.getWalletPendingTxs wid)
 
-getPendingTx :: WebWalletModeDB ctx m => CId Wal -> TxId -> m (Maybe PendingTx)
-getPendingTx = queryDisk ... A.GetPendingTx
+getPendingTx :: WalletSnapshot -> CId Wal -> TxId -> Maybe PendingTx
+getPendingTx ws wid txid = queryValue ws (S.getPendingTx wid txid)
 
 createAccount :: WebWalletModeDB ctx m => AccountId -> CAccountMeta -> m ()
 createAccount accId = updateDisk . A.CreateAccount accId
@@ -255,11 +275,11 @@ addOnlyNewTxMetas cWalId cTxMetas = updateDisk (A.AddOnlyNewTxMetas cWalId cTxMe
 setWalletTxHistory :: WebWalletModeDB ctx m => CId Wal -> [(CTxId, CTxMeta)] -> m ()
 setWalletTxHistory cWalId = updateDisk . A.SetWalletTxHistory cWalId
 
-getWalletUtxo :: WebWalletModeDB ctx m => m Utxo
-getWalletUtxo = queryDisk A.GetWalletUtxo
+getWalletUtxo :: WalletSnapshot -> Utxo
+getWalletUtxo ws = queryValue ws S.getWalletUtxo
 
-getWalletBalancesAndUtxo :: WebWalletModeDB ctx m => m (WalletBalances, Utxo)
-getWalletBalancesAndUtxo = queryDisk A.GetWalletBalancesAndUtxo
+getWalletBalancesAndUtxo :: WalletSnapshot -> (WalletBalances, Utxo)
+getWalletBalancesAndUtxo ws = queryValue ws S.getWalletBalancesAndUtxo
 
 updateWalletBalancesAndUtxo :: WebWalletModeDB ctx m => UtxoModifier -> m ()
 updateWalletBalancesAndUtxo = updateDisk . A.UpdateWalletBalancesAndUtxo
@@ -339,5 +359,3 @@ addOnlyNewPendingTx = updateDisk ... A.AddOnlyNewPendingTx
 flushWalletStorage :: WebWalletModeDB ctx m => m ()
 flushWalletStorage = updateDisk A.FlushWalletStorage
 
-getWalletStorage :: WebWalletModeDB ctx m => m WalletStorage
-getWalletStorage = queryDisk A.GetWalletStorage
