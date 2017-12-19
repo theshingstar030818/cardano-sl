@@ -59,7 +59,8 @@ import           Pos.Wallet.Web.State             (AddressLookupMode (Ever, Exis
                                                    NeedSorting (..))
 import           Pos.Wallet.Web.Util              (decodeCTypeOrFail,
                                                    getAccountAddrsOrThrow,
-                                                   getWalletAccountIds, getWalletAddrsSet)
+                                                   getWalletAccountIds,
+                                                   getWalletAddrsDetector)
 
 newPayment
     :: MonadWalletWebMode m
@@ -212,8 +213,8 @@ sendMoney SendActions{..} passphrase moneySource dstDistr policy = do
         return th
 
     addHistoryTx srcWallet th
-    srcWalletAddrs <- getWalletAddrsSet Ever srcWallet
     diff <- getCurChainDifficulty
+    srcWalletAddrsDetector <- getWalletAddrsDetector Ever srcWallet
 
     logDebug "sendMoney: constructing response"
-    fst <$> constructCTx srcWallet srcWalletAddrs diff th
+    fst <$> constructCTx srcWallet srcWalletAddrsDetector diff th
