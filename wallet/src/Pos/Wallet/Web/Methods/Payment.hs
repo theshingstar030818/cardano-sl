@@ -20,7 +20,7 @@ import           System.Wlog                      (logDebug)
 import           Pos.Aeson.ClientTypes            ()
 import           Pos.Aeson.WalletBackup           ()
 import           Pos.Client.Txp.Addresses         (MonadAddresses (..))
-import           Pos.Client.Txp.Balances          (getOwnUtxos)
+import           Pos.Client.Txp.Balances          (getOwnUtxosDefault)
 import           Pos.Client.Txp.History           (TxHistoryEntry (..))
 import           Pos.Client.Txp.Util              (computeTxFee, runTxCreator)
 import           Pos.Communication                (SendActions (..), prepareMTx)
@@ -52,7 +52,8 @@ import           Pos.Wallet.Web.Methods.Txp       (coinDistrToOutputs, rewrapTxE
 import           Pos.Wallet.Web.Mode              (MonadWalletWebMode, WalletWebMode,
                                                    convertCIdTOAddrs)
 import           Pos.Wallet.Web.Pending           (mkPendingTx)
-import           Pos.Wallet.Web.State             (AddressLookupMode (Ever, Existing))
+import           Pos.Wallet.Web.State             (AddressLookupMode (Ever, Existing),
+                                                   getWalletSnapshot)
 import           Pos.Wallet.Web.Util              (decodeCTypeOrFail,
                                                    getAccountAddrsOrThrow,
                                                    getWalletAccountIds, getWalletAddrsSet)
@@ -118,10 +119,9 @@ getMoneySourceWallet (AccountMoneySource accId)  = aiWId accId
 getMoneySourceWallet (WalletMoneySource wid)     = wid
 
 getMoneySourceUtxo :: MonadWalletWebMode m => MoneySource -> m Utxo
-getMoneySourceUtxo =
-    getMoneySourceAddresses >=>
-    mapM (decodeCTypeOrFail . cwamId) >=>
-    getOwnUtxos
+getMoneySourceUtxo ms = do
+    ws <- getWalletSnapshot
+    getMoneySourceAddresses ms >>= mapM (decodeCTypeOrFail . cwamId) >>= getOwnUtxosDefault ws
 
 -- [CSM-407] It should be moved to `Pos.Wallet.Web.Mode`, but
 -- to make it possible all this mess should be neatly separated
@@ -148,6 +148,7 @@ sendMoney
     -> NonEmpty (CId Addr, Coin)
     -> m CTx
 sendMoney SendActions{..} passphrase moneySource dstDistr = do
+    ws <- getWalletSnapshot
     let srcWallet = getMoneySourceWallet moneySource
     rootSk <- getSKById srcWallet
     checkPassMatches passphrase rootSk `whenNothing`
@@ -180,7 +181,7 @@ sendMoney SendActions{..} passphrase moneySource dstDistr = do
     th <- rewrapTxError "Cannot send transaction" $ do
         logDebug "sendMoney: we're to prepareMTx"
         (txAux, inpTxOuts') <-
-            prepareMTx getSinger srcAddrs outputs (relatedAccount, passphrase)
+            prepareMTx (getOwnUtxosDefault ws) getSinger srcAddrs outputs (relatedAccount, passphrase)
         logDebug "sendMoney: performed prepareMTx"
 
         ts <- Just <$> getCurrentTimestamp

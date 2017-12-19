@@ -15,6 +15,8 @@ module Pos.Wallet.Web.State.State
        , CustomAddressType (..)
 
        -- * Getters
+       , WalletSnapshot
+       , getWalletSnapshot
        , getProfile
        , doesAccountExist
        , getAccountIds
@@ -110,17 +112,22 @@ import           Pos.Wallet.Web.State.Storage (AddressLookupMode (..),
 type MonadWalletWebDB ctx m =
     ( MonadReader ctx m
     , HasLens WalletState ctx WalletState
-    , HasConfiguration
     )
 
 getWalletWebState :: MonadWalletWebDB ctx m => m WalletState
 getWalletWebState = view (lensOf @WalletState)
 
 -- | Constraint for working with web wallet DB
-type WebWalletModeDB ctx m = (MonadWalletWebDB ctx m, MonadIO m, MonadMockable m)
+type WebWalletModeDB ctx m = ( MonadWalletWebDB ctx m
+                             , MonadIO m
+                             , MonadMockable m
+                             , HasConfiguration
+                             )
+
+type WalletSnapshot = WalletStorage
 
 queryDisk
-    :: (EventState event ~ WalletStorage, QueryEvent event, WebWalletModeDB ctx m)
+    :: (EventState event ~ WalletStorage, QueryEvent event, MonadWalletWebDB ctx m, MonadIO m)
     => event -> m (EventResult event)
 queryDisk e = getWalletWebState >>= flip A.query e
 
@@ -128,6 +135,13 @@ updateDisk
     :: (EventState event ~ WalletStorage, UpdateEvent event, WebWalletModeDB ctx m)
     => event -> m (EventResult event)
 updateDisk e = getWalletWebState >>= flip A.update e
+
+-- | All queries work by doing a /single/ query of the DB state and then
+-- by using pure functions to extract the relevant information. This guarantees
+-- that we see a single self-consistent snapshot of the wallet state.
+--
+getWalletSnapshot :: WebWalletModeDB ctx m => m WalletSnapshot
+getWalletSnapshot = queryDisk A.GetWalletStorage
 
 doesAccountExist :: WebWalletModeDB ctx m => AccountId -> m Bool
 doesAccountExist = queryDisk . A.DoesAccountExist

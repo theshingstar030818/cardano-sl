@@ -23,6 +23,7 @@ import           Mockable                         (Mockable, SharedAtomic, Share
                                                    bracket, concurrently, currentTime,
                                                    delay, forConcurrently,
                                                    modifySharedAtomic, newSharedAtomic)
+import           Pos.Wallet.Web.State.Acidic      as A
 import           Serokell.Util                    (ms, sec)
 import           System.IO                        (BufferMode (LineBuffering), hClose,
                                                    hSetBuffering)
@@ -30,7 +31,7 @@ import           System.Random                    (randomRIO)
 import           System.Wlog                      (logError, logInfo)
 
 import           Pos.Binary                       (decodeFull)
-import           Pos.Client.Txp.Balances          (getOwnUtxoForPk)
+import           Pos.Client.Txp.Balances          (getOwnUtxoForPk, getOwnUtxosDefault)
 import           Pos.Client.Txp.Util              (createTx)
 import           Pos.Communication                (SendActions,
                                                    immediateConcurrentConversations,
@@ -50,6 +51,7 @@ import           Pos.Ssc.GodTossing.Configuration (HasGtConfiguration)
 import           Pos.Txp                          (TxAux, TxOut (..), TxOutAux (..), txaF)
 import           Pos.Update.Configuration         (HasUpdateConfiguration)
 import           Pos.Wallet                       (getSecretKeysPlain)
+import           Pos.Wallet.Web.State.State       (openMemState)
 
 import           Command.Types                    (SendMode (..),
                                                    SendToAllGenesisParams (..))
@@ -145,7 +147,11 @@ sendToAllGenesis sendActions (SendToAllGenesisParams duration conc delay_ sendMo
                           return (TxCount submitted failed (sending - 1), ())
                 | otherwise = (atomically $ tryReadTQueue txQueue) >>= \case
                       Just (key, txOuts, neighbours) -> do
-                          utxo <- getOwnUtxoForPk $ safeToPublic (fakeSigner key)
+                          -- FIXME (adinapoli): This is horrid as we are querying (and opening!!) the DB n times,
+                          -- but can we read it just once considering we probably want an updated utxo in
+                          -- every call to sendTxs?
+                          ws <- Mockable.bracket (liftIO openMemState) closeState (flip A.query A.GetWalletStorage)
+                          utxo <- getOwnUtxoForPk (getOwnUtxosDefault ws) $ safeToPublic (fakeSigner key)
                           etx <- createTx utxo (fakeSigner key) txOuts (toPublic key)
                           case etx of
                               Left err -> do
@@ -189,6 +195,7 @@ send
     -> NonEmpty TxOut
     -> AuxxMode ()
 send sendActions idx outputs = do
+    ws <- liftIO openMemState >>= flip A.query A.GetWalletStorage
     CmdCtx{ccPeers} <- getCmdCtx
     skeys <- getSecretKeysPlain
     let skey = skeys !! idx
@@ -196,6 +203,7 @@ send sendActions idx outputs = do
     etx <- withSafeSigner skey (pure emptyPassphrase) $ \mss -> runExceptT $ do
         ss <- mss `whenNothing` throwError (toException $ AuxxException "Invalid passphrase")
         ExceptT $ try $ submitTx
+            (getOwnUtxosDefault ws)
             (immediateConcurrentConversations sendActions ccPeers)
             ss
             (map TxOutAux outputs)

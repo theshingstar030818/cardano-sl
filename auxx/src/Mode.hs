@@ -31,12 +31,11 @@ import           Pos.Block.Slog                   (HasSlogContext (..),
                                                    HasSlogGState (..))
 import           Pos.Block.Types                  (Undo)
 import           Pos.Client.Txp.Addresses         (MonadAddresses (..))
-import           Pos.Client.Txp.Balances          (MonadBalances (..), getBalanceFromUtxo)
 import           Pos.Client.Txp.History           (MonadTxHistory (..),
                                                    getBlockHistoryDefault,
                                                    getLocalHistoryDefault, saveTxDefault)
 import           Pos.Communication                (NodeId)
-import           Pos.Context                      (HasNodeContext (..), unGenesisUtxo)
+import           Pos.Context                      (HasNodeContext (..))
 import           Pos.Core                         (HasConfiguration, HasPrimaryKey (..),
                                                    IsHeader)
 import           Pos.Crypto                       (PublicKey)
@@ -54,7 +53,6 @@ import           Pos.Slotting.MemState            (HasSlottingVar (..), MonadSlo
 import           Pos.Ssc.Class                    (HasSscContext (..), SscBlock)
 import           Pos.Ssc.GodTossing               (SscGodTossing)
 import           Pos.Ssc.GodTossing.Configuration (HasGtConfiguration)
-import           Pos.Txp                          (filterUtxoByAddrs, genesisUtxo)
 import           Pos.Util                         (Some (..))
 import           Pos.Util.JsonLog                 (HasJsonLogConfig (..))
 import           Pos.Util.LoggerName              (HasLoggerName' (..))
@@ -190,12 +188,6 @@ instance HasConfiguration => MonadGState AuxxMode where
 instance HasConfiguration => MonadBListener AuxxMode where
     onApplyBlocks = realModeToAuxx ... onApplyBlocks
     onRollbackBlocks = realModeToAuxx ... onRollbackBlocks
-
--- FIXME: I preserved the old behavior, but it most likely should be
--- changed!
-instance HasConfiguration => MonadBalances AuxxMode where
-    getOwnUtxos addrs = pure $ filterUtxoByAddrs addrs $ unGenesisUtxo genesisUtxo
-    getBalance = getBalanceFromUtxo
 
 instance (HasConfiguration, HasInfraConfiguration, HasGtConfiguration) =>
          MonadTxHistory AuxxSscType AuxxMode where

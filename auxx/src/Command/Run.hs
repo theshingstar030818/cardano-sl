@@ -9,34 +9,36 @@ module Command.Run
 
 import           Universum
 
-import           Control.Exception.Safe     (throwString)
-import           Data.ByteString.Base58     (bitcoinAlphabet, encodeBase58)
-import           Data.List                  ((!!))
-import           Formatting                 (build, int, sformat, stext, (%))
-import           NeatInterpolation          (text)
-import qualified Text.JSON.Canonical        as CanonicalJSON
+import           Control.Exception.Safe      (throwString)
+import           Data.ByteString.Base58      (bitcoinAlphabet, encodeBase58)
+import           Data.List                   ((!!))
+import           Formatting                  (build, int, sformat, stext, (%))
+import           NeatInterpolation           (text)
+import qualified Text.JSON.Canonical         as CanonicalJSON
 
-import           Pos.Auxx                   (makePubKeyAddressAuxx)
-import           Pos.Binary                 (serialize')
-import           Pos.Communication          (MsgType (..), Origin (..), SendActions,
-                                             dataFlow, immediateConcurrentConversations)
-import           Pos.Constants              (isDevelopment)
-import           Pos.Core                   (addressHash, coinF)
-import           Pos.Core.Address           (makeAddress)
-import           Pos.Core.Configuration     (genesisSecretKeys)
-import           Pos.Core.Types             (AddrAttributes (..), AddrSpendingData (..))
-import           Pos.Crypto                 (emptyPassphrase, encToPublic,
-                                             fullPublicKeyHexF, hashHexF, noPassEncrypt,
-                                             safeCreatePsk, withSafeSigner)
-import           Pos.Launcher.Configuration (HasConfigurations)
-import           Pos.Util.UserSecret        (readUserSecret, usKeys)
-import           Pos.Wallet                 (addSecretKey, getBalance, getSecretKeysPlain)
+import           Pos.Auxx                    (makePubKeyAddressAuxx)
+import           Pos.Binary                  (serialize')
+import           Pos.Client.Txp.Balances     (getBalanceFromUtxo, getOwnUtxosDefault)
+import           Pos.Communication           (MsgType (..), Origin (..), SendActions,
+                                              dataFlow, immediateConcurrentConversations)
+import           Pos.Constants               (isDevelopment)
+import           Pos.Core                    (addressHash, coinF)
+import           Pos.Core.Address            (makeAddress)
+import           Pos.Core.Configuration      (genesisSecretKeys)
+import           Pos.Core.Types              (AddrAttributes (..), AddrSpendingData (..))
+import           Pos.Crypto                  (emptyPassphrase, encToPublic,
+                                              fullPublicKeyHexF, hashHexF, noPassEncrypt,
+                                              safeCreatePsk, withSafeSigner)
+import           Pos.Launcher.Configuration  (HasConfigurations)
+import           Pos.Util.UserSecret         (readUserSecret, usKeys)
+import           Pos.Wallet                  (addSecretKey, getSecretKeysPlain)
+import           Pos.Wallet.Web.State.Acidic as A
 
-import qualified Command.Rollback           as Rollback
-import qualified Command.Tx                 as Tx
-import           Command.Types              (Command (..))
-import qualified Command.Update             as Update
-import           Mode                       (AuxxMode, CmdCtx (..), getCmdCtx)
+import qualified Command.Rollback            as Rollback
+import qualified Command.Tx                  as Tx
+import           Command.Types               (Command (..))
+import qualified Command.Update              as Update
+import           Mode                        (AuxxMode, CmdCtx (..), getCmdCtx)
 
 
 helpMsg :: Text
@@ -87,9 +89,10 @@ runCmd ::
     => SendActions AuxxMode
     -> Command
     -> AuxxMode ()
-runCmd _ (Balance addr) =
-    getBalance addr >>=
-    putText . sformat ("Current balance: "%coinF)
+runCmd _ (Balance addr) = do
+    ws <- bracket (liftIO openMemState) closeState (flip A.query A.GetWalletStorage)
+    coins <- getBalanceFromUtxo (getOwnUtxosDefault ws) addr
+    putText $ sformat ("Current balance: "%coinF) coins
 runCmd sendActions (Send idx outputs) = Tx.send sendActions idx outputs
 runCmd sendActions (SendToAllGenesis stagp) =
     Tx.sendToAllGenesis sendActions stagp

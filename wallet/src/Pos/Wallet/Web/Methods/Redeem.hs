@@ -15,6 +15,7 @@ import qualified Serokell.Util.Base64           as B64
 import           Pos.Aeson.ClientTypes          ()
 import           Pos.Aeson.WalletBackup         ()
 import           Pos.Client.Txp.Addresses       (MonadAddresses)
+import           Pos.Client.Txp.Balances        (getOwnUtxosDefault)
 import           Pos.Client.Txp.History         (TxHistoryEntry (..))
 import           Pos.Communication              (SendActions (..), prepareRedemptionTx)
 import           Pos.Core                       (getCurrentTimestamp)
@@ -35,7 +36,8 @@ import qualified Pos.Wallet.Web.Methods.Logic   as L
 import           Pos.Wallet.Web.Methods.Txp     (rewrapTxError, submitAndSaveNewPtx)
 import           Pos.Wallet.Web.Mode            (MonadWalletWebMode)
 import           Pos.Wallet.Web.Pending         (mkPendingTx)
-import           Pos.Wallet.Web.State           (AddressLookupMode (Ever))
+import           Pos.Wallet.Web.State           (AddressLookupMode (Ever),
+                                                 getWalletSnapshot)
 import           Pos.Wallet.Web.Util            (decodeCTypeOrFail, getWalletAddrsSet)
 
 
@@ -84,6 +86,7 @@ redeemAdaInternal
     -> ByteString
     -> m CTx
 redeemAdaInternal SendActions {..} passphrase cAccId seedBs = do
+    ws <- getWalletSnapshot
     (_, redeemSK) <- maybeThrow (RequestError "Seed is not 32-byte long") $
                      redeemDeterministicKeyGen seedBs
     accId <- decodeCTypeOrFail cAccId
@@ -94,7 +97,7 @@ redeemAdaInternal SendActions {..} passphrase cAccId seedBs = do
                L.newAddress RandomSeed passphrase accId
     th <- rewrapTxError "Cannot send redemption transaction" $ do
         (txAux, redeemAddress, redeemBalance) <-
-                prepareRedemptionTx redeemSK dstAddr
+                prepareRedemptionTx (getOwnUtxosDefault ws) redeemSK dstAddr
 
         ts <- Just <$> getCurrentTimestamp
         let tx = taTx txAux
