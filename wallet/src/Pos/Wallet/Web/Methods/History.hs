@@ -33,22 +33,25 @@ import           Pos.Wallet.Web.ClientTypes (AccountId (..), Addr, CId, CTx (..)
 import           Pos.Wallet.Web.Error       (WalletError (..))
 import           Pos.Wallet.Web.Mode        (MonadWalletWebMode, convertCIdTOAddrs)
 import           Pos.Wallet.Web.Pending     (PendingTx (..), ptxPoolInfo)
-import           Pos.Wallet.Web.State       (AddressLookupMode (Ever), addOnlyNewTxMetas,
+import           Pos.Wallet.Web.State       (WalletSnapshot, getWalletSnapshot,
+                                             AddressLookupMode (Ever), addOnlyNewTxMetas,
                                              getHistoryCache, getPendingTx, getTxMeta,
                                              getWalletPendingTxs, setWalletTxMeta)
 import           Pos.Wallet.Web.Util        (getAccountAddrsOrThrow, getWalletAccountIds,
                                              getWalletAddrs)
 
-getFullWalletHistory :: MonadWalletWebMode m => CId Wal -> m (Map TxId (CTx, POSIXTime), Word)
-getFullWalletHistory cWalId = do
+getFullWalletHistory :: MonadWalletWebMode m
+                     => WalletSnapshot
+                     -> CId Wal -> m (Map TxId (CTx, POSIXTime), Word)
+getFullWalletHistory ws cWalId = do
     logDebug "getFullWalletHistory: start"
 
-    cAddrs <- getWalletAddrs Ever cWalId
+    cAddrs <- getWalletAddrs ws Ever cWalId
     addrs <- convertCIdTOAddrs cAddrs
 
     unfilteredLocalHistory <- getLocalHistory addrs
 
-    blockHistory <- getHistoryCache cWalId >>= \case
+    blockHistory <- case getHistoryCache ws cWalId of
         Just hist -> pure hist
         Nothing -> do
             logWarning $
@@ -61,7 +64,7 @@ getFullWalletHistory cWalId = do
 
     logTxHistory "Mempool" localHistory
 
-    fullHistory <- addRecentPtxHistory cWalId $ localHistory `Map.union` blockHistory
+    fullHistory <- addRecentPtxHistory ws cWalId $ localHistory `Map.union` blockHistory
     diff        <- getCurChainDifficulty
     let !cAddrsSet = S.fromList cAddrs
     logDebug "getFullWalletHistory: fetched full history"
@@ -72,21 +75,23 @@ getFullWalletHistory cWalId = do
     -- transactions from block and resubmitting timestamp is already known.
     addHistoryTxs cWalId localHistory
     logDebug "getFullWalletHistory: invoked addHistoryTxs"
+    --TODO: does addHistoryTxs change the db such that we need to re-read for constructCTx?
 
-    cHistory <- forM fullHistory (constructCTx cWalId cAddrsSet diff)
+    cHistory <- forM fullHistory (constructCTx ws cWalId cAddrsSet diff)
     logDebug "getFullWalletHistory: formed cTxs"
     pure (cHistory, fromIntegral $ Map.size cHistory)
 
 getHistory
     :: MonadWalletWebMode m
-    => CId Wal
+    => WalletSnapshot
+    -> CId Wal
     -> [AccountId]
     -> Maybe (CId Addr)
     -> m (Map TxId (CTx, POSIXTime), Word)
-getHistory cWalId accIds mAddrId = do
+getHistory ws cWalId accIds mAddrId = do
     -- FIXME: searching when only AddrId is provided is not supported yet.
-    accAddrs <- S.fromList . map cwamId <$> concatMapM (getAccountAddrsOrThrow Ever) accIds
-    allAccIds <- getWalletAccountIds cWalId
+    accAddrs <- S.fromList . map cwamId <$> concatMapM (getAccountAddrsOrThrow ws Ever) accIds
+    let allAccIds = getWalletAccountIds ws cWalId
 
     let filterFn :: Map TxId (CTx, POSIXTime) -> Map TxId (CTx, POSIXTime)
         !filterFn = case mAddrId of
@@ -100,7 +105,7 @@ getHistory cWalId accIds mAddrId = do
             | addr `S.member` accAddrs -> filterByAddrs (S.singleton addr)
             | otherwise                -> throw errorBadAddress
 
-    !res <- first filterFn <$> getFullWalletHistory cWalId
+    !res <- first filterFn <$> getFullWalletHistory ws cWalId
     logDebug "getHistory: filtered transactions"
     return res
   where
@@ -125,14 +130,15 @@ getHistoryLimited
     -> Maybe Word
     -> m ([CTx], Word)
 getHistoryLimited mCWalId mAccId mAddrId mSkip mLimit = do
+    ws <- getWalletSnapshot
     (cWalId, accIds) <- case (mCWalId, mAccId) of
         (Nothing, Nothing)      -> throwM errorSpecifySomething
         (Just _, Just _)        -> throwM errorDontSpecifyBoth
-        (Just cWalId', Nothing) -> do
-            accIds' <- getWalletAccountIds cWalId'
-            pure (cWalId', accIds')
+        (Just cWalId', Nothing) ->
+            let accIds' = getWalletAccountIds ws cWalId'
+             in pure (cWalId', accIds')
         (Nothing, Just accId)   -> pure (aiWId accId, [accId])
-    (unsortedThs, n) <- getHistory cWalId accIds mAddrId
+    (unsortedThs, n) <- getHistory ws cWalId accIds mAddrId
 
     let !sortedTxh = forceList $ sortByTime (Map.elems unsortedThs)
     logDebug "getHistoryLimited: sorted transactions"
@@ -180,16 +186,17 @@ addHistoryTxs cWalId historyEntries = do
 
 constructCTx
     :: MonadWalletWebMode m
-    => CId Wal
+    => WalletSnapshot
+    -> CId Wal
     -> Set (CId Addr)
     -> ChainDifficulty
     -> TxHistoryEntry
     -> m (CTx, POSIXTime)
-constructCTx cWalId walAddrsSet diff wtx@THEntry{..} = do
+constructCTx ws cWalId walAddrsSet diff wtx@THEntry{..} = do
     let cId = encodeCType _thTxId
     meta <- maybe (CTxMeta <$> liftIO getPOSIXTime) -- It's impossible case but just in case
-            pure =<< getTxMeta cWalId cId
-    ptxCond <- encodeCType . fmap _ptxCond <$> getPendingTx cWalId _thTxId
+            pure $ getTxMeta ws cWalId cId
+    let ptxCond = encodeCType . fmap _ptxCond $ getPendingTx ws cWalId _thTxId
     either (throwM . InternalError) (pure . (, ctmDate meta)) $
         mkCTx diff wtx meta ptxCond walAddrsSet
 
@@ -202,9 +209,10 @@ updateTransaction accId txId txMeta = do
 
 addRecentPtxHistory
     :: MonadWalletWebMode m
-    => CId Wal -> Map TxId TxHistoryEntry -> m (Map TxId TxHistoryEntry)
-addRecentPtxHistory wid currentHistory = do
-    pendingTxs <- getWalletPendingTxs wid
+    => WalletSnapshot
+    -> CId Wal -> Map TxId TxHistoryEntry -> m (Map TxId TxHistoryEntry)
+addRecentPtxHistory ws wid currentHistory = do
+    let pendingTxs = getWalletPendingTxs ws wid
     let candidates = toCandidates pendingTxs
     logTxHistory "Pending" candidates
     return $ Map.union currentHistory candidates

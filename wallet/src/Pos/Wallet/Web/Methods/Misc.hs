@@ -39,10 +39,9 @@ import           Pos.Wallet.Web.ClientTypes   (CProfile (..), CUpdateInfo (..),
                                                SyncProgress (..))
 import           Pos.Wallet.Web.Error         (WalletError (..))
 import           Pos.Wallet.Web.Mode          (MonadWalletWebMode)
-import           Pos.Wallet.Web.State         (getNextUpdate, getProfile,
-                                               getWalletStorage, removeNextUpdate,
+import           Pos.Wallet.Web.State         (WalletSnapshot, getNextUpdate, getProfile,
+                                               getWalletSnapshot, removeNextUpdate,
                                                setProfile, testReset)
-import           Pos.Wallet.Web.State.Storage (WalletStorage)
 
 
 ----------------------------------------------------------------------------
@@ -50,10 +49,15 @@ import           Pos.Wallet.Web.State.Storage (WalletStorage)
 ----------------------------------------------------------------------------
 
 getUserProfile :: MonadWalletWebMode m => m CProfile
-getUserProfile = getProfile
+getUserProfile = do
+    ws <- getWalletSnapshot
+    return (getProfile ws)
 
 updateUserProfile :: MonadWalletWebMode m => CProfile -> m CProfile
-updateUserProfile profile = setProfile profile >> getUserProfile
+updateUserProfile profile = do
+    setProfile profile
+    ws <- getWalletSnapshot --TODO: the update tx should get the relevant info
+    return (getProfile ws)
 
 ----------------------------------------------------------------------------
 -- Address
@@ -71,10 +75,12 @@ isValidAddress sAddr =
 -- | Get last update info
 nextUpdate :: MonadWalletWebMode m => m CUpdateInfo
 nextUpdate = do
-    updateInfo <- getNextUpdate >>= maybeThrow noUpdates
+    ws <- getWalletSnapshot
+    updateInfo <- maybeThrow noUpdates (getNextUpdate ws)
     if isUpdateActual (cuiSoftwareVersion updateInfo)
         then pure updateInfo
         else removeNextUpdate >> nextUpdate
+        --TODO: this should be a single transaction
   where
     isUpdateActual :: SoftwareVersion -> Bool
     isUpdateActual ver = svAppName ver == svAppName curSoftwareVersion
@@ -117,7 +123,7 @@ testResetAll = deleteAllKeys >> testReset
 ----------------------------------------------------------------------------
 
 data WalletStateSnapshot = WalletStateSnapshot
-    { wssWalletStorage :: WalletStorage
+    { wssWalletStorage :: WalletSnapshot
     } deriving (Generic)
 
 deriveJSON defaultOptions ''WalletStateSnapshot
@@ -129,4 +135,4 @@ instance Buildable WalletStateSnapshot where
     build _ = "<wallet-state-snapshot>"
 
 dumpState :: MonadWalletWebMode m => m WalletStateSnapshot
-dumpState = WalletStateSnapshot <$> getWalletStorage
+dumpState = WalletStateSnapshot <$> getWalletSnapshot

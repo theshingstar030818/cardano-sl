@@ -38,6 +38,7 @@ import           Pos.Util.Chrono                  (NE, NewestFirst (..), OldestF
 import           Pos.Wallet.Web.Account           (AccountMode, getSKById)
 import           Pos.Wallet.Web.ClientTypes       (CId, Wal)
 import qualified Pos.Wallet.Web.State             as WS
+import           Pos.Wallet.Web.State             (WalletSnapshot, WebWalletModeDB)
 import           Pos.Wallet.Web.Tracking.Modifier (CAccModifier (..))
 import           Pos.Wallet.Web.Tracking.Sync     (applyModifierToWallet,
                                                    rollbackModifierFromWallet,
@@ -45,13 +46,13 @@ import           Pos.Wallet.Web.Tracking.Sync     (applyModifierToWallet,
 import           Pos.Wallet.Web.Util              (getWalletAddrMetas)
 
 walletGuard ::
-    ( AccountMode ctx m
-    )
-    => HeaderHash
+       WithLogger m
+    => WalletSnapshot
+    -> HeaderHash
     -> CId Wal
     -> m ()
     -> m ()
-walletGuard curTip wAddr action = WS.getWalletSyncTip wAddr >>= \case
+walletGuard ws curTip wAddr action = case WS.getWalletSyncTip ws wAddr of
     Nothing -> logWarning $ sformat ("There is no syncTip corresponding to wallet #"%build) wAddr
     Just WS.NotSynced    -> logInfo $ sformat ("Wallet #"%build%" hasn't been synced yet") wAddr
     Just (WS.SyncedWith wTip)
@@ -66,6 +67,7 @@ onApplyTracking
     :: forall ssc ctx m .
     ( SscHelpersClass ssc
     , AccountMode ctx m
+    , WebWalletModeDB ctx m
     , MonadSlotsData ctx m
     , MonadDBRead m
     , MonadReporting ctx m
@@ -73,12 +75,13 @@ onApplyTracking
     )
     => OldestFirst NE (Blund ssc) -> m SomeBatchOp
 onApplyTracking blunds = setLogger $ do
+    ws <- WS.getWalletSnapshot
     let oldestFirst = getOldestFirst blunds
         txsWUndo = concatMap gbTxsWUndo oldestFirst
         newTipH = NE.last oldestFirst ^. _1 . blockHeader
     currentTipHH <- GS.getTip
-    mapM_ (catchInSync "apply" $ syncWallet currentTipHH newTipH txsWUndo)
-       =<< WS.getWalletAddresses
+    mapM_ (catchInSync "apply" $ syncWallet ws currentTipHH newTipH txsWUndo)
+          (WS.getWalletAddresses ws)
 
     -- It's silly, but when the wallet is migrated to RocksDB, we can write
     -- something a bit more reasonable.
@@ -86,14 +89,15 @@ onApplyTracking blunds = setLogger $ do
   where
 
     syncWallet
-        :: HeaderHash
+        :: WalletSnapshot
+        -> HeaderHash
         -> BlockHeader ssc
         -> [(TxAux, TxUndo, BlockHeader ssc)]
         -> CId Wal
         -> m ()
-    syncWallet curTip newTipH blkTxsWUndo wAddr = walletGuard curTip wAddr $ do
+    syncWallet ws curTip newTipH blkTxsWUndo wAddr = walletGuard ws curTip wAddr $ do
         blkHeaderTs <- blkHeaderTsGetter
-        allAddresses <- getWalletAddrMetas WS.Ever wAddr
+        allAddresses <- getWalletAddrMetas ws WS.Ever wAddr
         encSK <- getSKById wAddr
         let mapModifier =
                 trackingApplyTxs encSK allAddresses gbDiff blkHeaderTs ptxBlkInfo blkTxsWUndo
@@ -107,6 +111,7 @@ onApplyTracking blunds = setLogger $ do
 onRollbackTracking
     :: forall ssc ctx m .
     ( AccountMode ctx m
+    , WebWalletModeDB ctx m
     , MonadDBRead m
     , MonadSlots ctx m
     , SscHelpersClass ssc
@@ -115,25 +120,27 @@ onRollbackTracking
     )
     => NewestFirst NE (Blund ssc) -> m SomeBatchOp
 onRollbackTracking blunds = setLogger $ do
+    ws <- WS.getWalletSnapshot
     let newestFirst = getNewestFirst blunds
         txs = concatMap (reverse . gbTxsWUndo) newestFirst
         newTip = (NE.last newestFirst) ^. prevBlockL
     currentTipHH <- GS.getTip
-    mapM_ (catchInSync "rollback" $ syncWallet currentTipHH newTip txs)
-        =<< WS.getWalletAddresses
+    mapM_ (catchInSync "rollback" $ syncWallet ws currentTipHH newTip txs)
+          (WS.getWalletAddresses ws)
 
     -- It's silly, but when the wallet is migrated to RocksDB, we can write
     -- something a bit more reasonable.
     pure mempty
   where
     syncWallet
-        :: HeaderHash
+        :: WalletSnapshot
+        -> HeaderHash
         -> HeaderHash
         -> [(TxAux, TxUndo, BlockHeader ssc)]
         -> CId Wal
         -> m ()
-    syncWallet curTip newTip txs wid = walletGuard curTip wid $ do
-        allAddresses <- getWalletAddrMetas WS.Ever wid
+    syncWallet ws curTip newTip txs wid = walletGuard ws curTip wid $ do
+        allAddresses <- getWalletAddrMetas ws WS.Ever wid
         encSK <- getSKById wid
         blkHeaderTs <- blkHeaderTsGetter
 
