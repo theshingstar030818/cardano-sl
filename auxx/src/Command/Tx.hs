@@ -196,7 +196,9 @@ send sendActions idx outputs = do
         curPk = encToPublic skey
     etx <- withSafeSigner skey (pure emptyPassphrase) $ \mss -> runExceptT $ do
         ss <- mss `whenNothing` throwError (toException $ AuxxException "Invalid passphrase")
+        mps <- getMemPoolSnapshot
         ExceptT $ try $ submitTx
+            mps
             (immediateConcurrentConversations sendActions ccPeers)
             getOwnUtxos
             ss

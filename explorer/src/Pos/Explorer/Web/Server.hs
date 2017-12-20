@@ -59,10 +59,10 @@ import           Pos.Ssc.GodTossing               (SscGodTossing)
 import           Pos.Ssc.GodTossing.Configuration (HasGtConfiguration)
 import           Pos.Txp                          (MonadTxpMem, Tx (..), TxAux, TxId,
                                                    TxMap, TxOutAux (..), genesisUtxo,
-                                                   getLocalTxs, getMemPool, mpLocalTxs,
-                                                   taTx, topsortTxs, txOutValue, txpTxs,
-                                                   unGenesisUtxo, utxoToAddressCoinPairs,
-                                                   _txOutputs)
+                                                   getLocalTxs, getMemPoolSnapshot,
+                                                   mpLocalTxs, taTx, topsortTxs,
+                                                   txOutValue, txpTxs, unGenesisUtxo,
+                                                   utxoToAddressCoinPairs, _txOutputs)
 import           Pos.Util                         (maybeThrow)
 import           Pos.Util.Chrono                  (NewestFirst (..))
 import           Pos.Web                          (serveImplNoTLS)
@@ -689,15 +689,16 @@ fetchTxFromMempoolOrFail txId = do
 
 getMempoolTxs :: ExplorerMode ctx m => m [TxInternal]
 getMempoolTxs = do
-
     localTxs <- fmap reverse $ topsortTxsOrFail mkWhTx =<< tlocalTxs
 
     fmap catMaybes . forM localTxs $ \(id, txAux) -> do
         mextra <- getTxExtra id
         forM mextra $ \extra -> pure $ TxInternal extra (taTx txAux)
   where
+    mempoolSnapshot = getMemPoolSnapshot
+
     tlocalTxs :: (MonadIO m, MonadTxpMem ext ctx m) => m [(TxId, TxAux)]
-    tlocalTxs = getLocalTxs
+    tlocalTxs = getLocalTxs mempoolSnapshot
 
     mkWhTx :: (TxId, TxAux) -> WithHash Tx
     mkWhTx (txid, txAux) = WithHash (taTx txAux) txid

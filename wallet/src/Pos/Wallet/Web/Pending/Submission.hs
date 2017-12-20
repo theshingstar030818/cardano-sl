@@ -108,11 +108,15 @@ ptxResubmissionHandler PendingTx{..} =
 -- but treats tx as future /pending/ transaction.
 submitAndSavePtx
     :: MonadWalletWebMode m
-    => PtxSubmissionHandlers m -> EnqueueMsg m -> PendingTx -> m ()
+    => MemPoolSnapshot
+    -> PtxSubmissionHandlers m
+    -> EnqueueMsg m
+    -> PendingTx
+    -> m ()
 submitAndSavePtx PtxSubmissionHandlers{..} enqueue ptx@PendingTx{..} = do
     ack <- submitTxRaw enqueue _ptxTxAux
     reportSubmitted ack
-    saveTx (_ptxTxId, _ptxTxAux) `catches` handlers ack
+    saveTx mempoolSnapshot (_ptxTxId, _ptxTxAux) `catches` handlers ack
     addOnlyNewPendingTx ptx
     when ack $ ptxUpdateMeta _ptxWallet _ptxTxId PtxMarkAcknowledged
   where

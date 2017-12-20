@@ -33,8 +33,9 @@ import           Pos.Crypto                 (RedeemSecretKey, SafeSigner, hash,
 import           Pos.DB.Class               (MonadGState)
 import           Pos.Txp.Core               (TxAux (..), TxId, TxOut (..), TxOutAux (..),
                                              txaF)
-import           Pos.Txp.Toil.Types         (Utxo)
+import           Pos.Txp.MemState           (MemPoolSnapshot)
 import           Pos.Txp.Network.Types      (TxMsgContents (..))
+import           Pos.Txp.Toil.Types         (Utxo)
 import           Pos.Util.Util              (eitherToThrow)
 import           Pos.WorkMode.Class         (MinWorkMode)
 
@@ -49,11 +50,12 @@ type TxMode ssc m
 
 submitAndSave
     :: TxMode ssc m
-    => EnqueueMsg m -> TxAux -> m Bool
-submitAndSave enqueue txAux@TxAux {..} = do
+    => MemPoolSnapshot
+    -> EnqueueMsg m -> TxAux -> m Bool
+submitAndSave mps enqueue txAux@TxAux {..} = do
     let txId = hash taTx
     accepted <- submitTxRaw enqueue txAux
-    saveTx (txId, txAux)
+    saveTx mps (txId, txAux)
     return accepted
 
 -- | Construct Tx using multiple secret keys and given list of desired outputs.
@@ -72,17 +74,18 @@ prepareMTx getOwnUtxos hdwSigners addrs outputs addrData = do
 -- | Construct Tx using secret key and given list of desired outputs
 submitTx
     :: TxMode ssc m
-    => EnqueueMsg m
-    -> ([Address] -> m Utxo)
+    => MemPoolSnapshot
+    -> EnqueueMsg m
+    -> (MemPoolSnapshot -> [Address] -> m Utxo)
     -> SafeSigner
     -> NonEmpty TxOutAux
     -> AddrData m
     -> m (TxAux, NonEmpty TxOut)
-submitTx enqueue getOwnUtxos ss outputs addrData = do
+submitTx mps enqueue getOwnUtxos ss outputs addrData = do
     let ourPk = safeToPublic ss
-    utxo <- getOwnUtxoForPk getOwnUtxos ourPk
+    utxo <- getOwnUtxoForPk (getOwnUtxos mps) ourPk
     txWSpendings <- eitherToThrow =<< createTx utxo ss outputs addrData
-    txWSpendings <$ submitAndSave enqueue (fst txWSpendings)
+    txWSpendings <$ submitAndSave mps enqueue (fst txWSpendings)
 
 -- | Construct redemption Tx using redemption secret key and a output address
 prepareRedemptionTx

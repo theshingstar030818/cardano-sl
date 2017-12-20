@@ -41,6 +41,7 @@ import           Pos.Explorer.Txp.Local     (eTxProcessTransactionNoLock)
 #else
 import           Pos.Txp.Logic              (txProcessTransactionNoLock)
 #endif
+import           Pos.Txp.MemState           (getMemPoolSnapshot)
 import           Pos.Txp.Toil.Class         (MonadUtxo (..), MonadUtxoRead (..))
 import           Pos.Txp.Toil.Types         (Utxo)
 import qualified Pos.Txp.Toil.Utxo          as Utxo
@@ -222,10 +223,11 @@ genTxPayload = do
         let tx = taTx txAux
         let txId = hash tx
         let txIns = _txInputs tx
+        mps <- getMemPoolSnapshot
 #ifdef WITH_EXPLORER
-        res <- lift . lift $ eTxProcessTransactionNoLock (txId, txAux)
+        res <- lift . lift $ eTxProcessTransactionNoLock mps (txId, txAux)
 #else
-        res <- lift . lift $ txProcessTransactionNoLock (txId, txAux)
+        res <- lift . lift $ txProcessTransactionNoLock mps (txId, txAux)
 #endif
         case res of
             Left e  -> error $ "genTransaction@txProcessTransaction: got left: " <> pretty e
