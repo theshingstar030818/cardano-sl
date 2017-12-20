@@ -33,7 +33,7 @@ import           Pos.Wallet.Web       (WalletWebMode, bracketWalletWS, bracketWa
                                        getSKById, runWRealMode, syncWalletsWithGState,
                                        walletServeWebFull, walletServerOuts)
 import           Pos.Wallet.Web.State (cleanupAcidStatePeriodically, flushWalletStorage,
-                                       getWalletAddresses)
+                                       getWalletAddresses, getWalletSnapshot)
 import           Pos.Web              (serveWebGT)
 import           Pos.WorkMode         (WorkMode)
 
@@ -64,7 +64,8 @@ actionWithWallet sscParams nodeParams wArgs@WalletArgs {..} =
     convPlugins = (, mempty) . map (\act -> ActionSpec $ \__vI __sA -> act)
     syncWallets :: WalletWebMode ()
     syncWallets = do
-        sks <- getWalletAddresses >>= mapM getSKById
+        ws  <- getWalletSnapshot
+        sks <- forM (getWalletAddresses ws) getSKById
         syncWalletsWithGState @WalletSscType sks
     plugins :: HasConfigurations => ([WorkerSpec WalletWebMode], OutSpecs)
     plugins = mconcat [ convPlugins (pluginsGT wArgs)
