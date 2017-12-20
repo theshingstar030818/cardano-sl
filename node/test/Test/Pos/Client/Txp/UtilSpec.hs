@@ -1,4 +1,5 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE TypeFamilies              #-}
 
 -- | Specification of Pos.Client.Txp.Util
 
@@ -9,6 +10,7 @@ module Test.Pos.Client.Txp.UtilSpec
 import           Universum
 
 import qualified Data.ByteString          as BS
+import           Data.Default             (def)
 import qualified Data.HashMap.Strict      as HM
 import qualified Data.List.NonEmpty       as NE
 import qualified Data.Map                 as M
@@ -16,7 +18,7 @@ import qualified Data.Set                 as S
 import           Formatting               (build, hex, left, sformat, shown, (%), (%.))
 import           Test.Hspec               (Spec, describe)
 import           Test.Hspec.QuickCheck    (prop)
-import           Test.QuickCheck          (Discard (..), choose)
+import           Test.QuickCheck          (Discard (..), Testable, choose)
 import           Test.QuickCheck.Monadic  (forAllM, stop)
 
 import           Pos.Client.Txp.Addresses (MonadAddresses (..))
@@ -102,7 +104,7 @@ testCreateMTx
     => CreateMTxParams
     -> TxpTestProperty (Either TxError (TxAux, NonEmpty TxOut))
 testCreateMTx CreateMTxParams{..} =
-    createMTx useGroupedInputs cmpUtxo (getSignerFromList cmpSigners)
+    createMTx mempty cmpInputSelectionPolicy cmpUtxo (getSignerFromList cmpSigners)
     cmpOutputs cmpAddrData
 
 createMTxWorksWhenWeAreRichSpec :: HasTxpConfigurations => TxpTestProperty ()
@@ -182,7 +184,7 @@ redemptionSpec = do
 txWithRedeemOutputFailsSpec :: HasTxpConfigurations => TxpTestProperty ()
 txWithRedeemOutputFailsSpec = do
     txOrError <-
-        createMTx useGroupedInputs utxo (getSignerFromList signers) outputs addrData
+        createMTx mempty def utxo (getSignerFromList signers) outputs addrData
     case txOrError of
         Left (OutputIsRedeem _) -> return ()
         Left err -> stopProperty $ pretty err
@@ -250,13 +252,15 @@ feeForManyAddressesSpec manyAddrs =
 
 -- | Container for parameters of `createMTx`.
 data CreateMTxParams = CreateMTxParams
-    { cmpUtxo     :: !Utxo
+    { cmpInputSelectionPolicy :: InputSelectionPolicy
+    -- ^ Input selection policy
+    , cmpUtxo                 :: !Utxo
     -- ^ Unspent transaction outputs.
-    , cmpSigners  :: !(NonEmpty (SafeSigner, Address))
+    , cmpSigners              :: !(NonEmpty (SafeSigner, Address))
     -- ^ Wrappers around secret keys for addresses in Utxo.
-    , cmpOutputs  :: !TxOutputs
+    , cmpOutputs              :: !TxOutputs
     -- ^ A (nonempty) list of desired tx outputs.
-    , cmpAddrData :: !(AddrData TxpTestMode)
+    , cmpAddrData             :: !(AddrData TxpTestMode)
     -- ^ Data that is normally used for creation of change addresses.
     -- In tests, it is always `()`.
     }
