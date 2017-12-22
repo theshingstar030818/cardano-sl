@@ -53,14 +53,15 @@ import           Pos.Binary.Update ()
 import           Pos.Core (ApplicationName, BlockVersion, ChainDifficulty, NumSoftwareVersion,
                            SlotId, SoftwareVersion (..), StakeholderId, TimeDiff (..), epochSlots)
 import           Pos.Core.Configuration (HasConfiguration, genesisBlockVersionData)
-import           Pos.Core.Update (BlockVersionData (..), UpId, UpdateProposal (..))
+import           Pos.Core.Update (BlockVersionData (..), UpId, UpdateProposal (..),
+                                  currentSystemTag)
 import           Pos.Crypto (hash)
 import           Pos.DB (DBIteratorClass (..), DBTag (..), IterType, MonadDB, MonadDBRead (..),
                          RocksBatchOp (..), dbSerializeValue, encodeWithKeyPrefix)
 import           Pos.DB.Error (DBError (DBMalformed))
 import           Pos.DB.GState.Common (gsGetBi, writeBatchGState)
 import           Pos.Slotting.Types (EpochSlottingData (..), SlottingData, createInitSlottingData)
-import           Pos.Update.Configuration (HasUpdateConfiguration, ourAppName, ourSystemTag)
+import           Pos.Update.Configuration (HasUpdateConfiguration, ourAppName)
 import           Pos.Update.Constants (genesisBlockVersion, genesisSoftwareVersions)
 import           Pos.Update.Poll.Types (BlockVersionState (..), ConfirmedProposalState (..),
                                         DecidedProposalState (dpsDifficulty), ProposalState (..),
@@ -267,7 +268,7 @@ getConfirmedProposals reqNsv =
             Just cps
         | otherwise = Nothing
     hasOurSystemTag ConfirmedProposalState {..} =
-        isJust $ upData cpsUpdateProposal ^. at ourSystemTag
+        isJust $ upData cpsUpdateProposal ^. at currentSystemTag
 
 -- Iterator by block versions
 data BVIter

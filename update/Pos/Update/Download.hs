@@ -28,11 +28,12 @@ import           System.Wlog (WithLogger, logDebug, logInfo, logWarning)
 
 import           Pos.Binary.Class (Raw)
 import           Pos.Binary.Update ()
-import           Pos.Core.Update (SoftwareVersion (..), UpdateData (..), UpdateProposal (..))
+import           Pos.Core.Update (SoftwareVersion (..), UpdateData (..),
+                                  UpdateProposal (..), currentSystemTag)
 import           Pos.Crypto (Hash, castHash, hash)
 import           Pos.Exception (reportFatalError)
 import           Pos.Reporting (reportOrLogW)
-import           Pos.Update.Configuration (curSoftwareVersion, ourSystemTag)
+import           Pos.Update.Configuration (curSoftwareVersion)
 import           Pos.Update.Context (UpdateContext (..))
 import           Pos.Update.DB.Misc (isUpdateInstalled)
 import           Pos.Update.Mode (UpdateMode)
@@ -97,7 +98,7 @@ getUpdateHash ConfirmedProposalState{..} = do
 
     let data_ = upData cpsUpdateProposal
         dataHash = if useInstaller then udPkgHash else udAppDiffHash
-        mupdHash = dataHash <$> HM.lookup ourSystemTag data_
+        mupdHash = dataHash <$> HM.lookup currentSystemTag data_
 
     logDebug $ sformat ("Proposal's upData: "%mapJson) data_
 

@@ -23,7 +23,7 @@ import           Pos.Communication (ActionSpec (..), OutSpecs, WorkerSpec, wrapA
 import           Pos.Context (getOurPublicKey, ncNetworkConfig)
 import           Pos.Core (GenesisData (gdBootStakeholders, gdHeavyDelegation),
                            GenesisDelegation (..), GenesisWStakeholders (..), addressHash,
-                           gdFtsSeed, genesisData)
+                           gdFtsSeed, genesisData, currentSystemTag)
 import           Pos.Crypto (pskDelegatePk)
 import qualified Pos.DB.BlockIndex as DB
 import           Pos.DHT.Real (KademliaDHTInstance (..), kademliaJoinNetworkNoThrow,
@@ -37,7 +37,7 @@ import           Pos.Shutdown (waitForShutdown)
 import           Pos.Slotting (waitSystemStart)
 import           Pos.Txp (bootDustThreshold)
 import           Pos.Update.Configuration (HasUpdateConfiguration, curSoftwareVersion,
-                                           lastKnownBlockVersion, ourSystemTag)
+                                           lastKnownBlockVersion)
 import           Pos.Util.AssertMode (inAssertMode)
 import           Pos.Util.CompileInfo (HasCompileInfo, compileInfo)
 import           Pos.Util.LogSafe (logInfoS)
@@ -158,4 +158,4 @@ nodeStartMsg = logInfo msg
                     %build% ", systemTag: " %build)
                    curSoftwareVersion
                    lastKnownBlockVersion
-                   ourSystemTag
+                   currentSystemTag

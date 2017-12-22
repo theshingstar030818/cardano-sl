@@ -26,6 +26,7 @@ module Pos.Core.Update.Types
        , UpdateData (..)
        , UpdateProposalToSign (..)
        , SystemTag (getSystemTag)
+       , currentSystemTag
        , mkSystemTag
        , systemTagMaxLength
 
@@ -52,11 +53,13 @@ import           Data.Text.Lazy.Builder (Builder)
 import           Data.Time.Units (Millisecond)
 import           Formatting (Format, bprint, build, builder, int, later, shown, stext, (%))
 import           Instances.TH.Lift ()
+import           Language.Haskell.TH        (runQ)
 import           Language.Haskell.TH.Syntax (Lift)
 import qualified Prelude
 import           Serokell.AcidState ()
 import           Serokell.Data.Memory.Units (Byte, memory)
 import           Serokell.Util.Text (listJson)
+import           System.Info (arch, os)
 
 import           Pos.Binary.Class (Bi, Raw)
 import           Pos.Core.Common (CoinPortion, ScriptVersion, TxFeePolicy, addressHash)
@@ -295,6 +298,23 @@ mkSystemTag tag | T.length tag > systemTagMaxLength
                     = fail "SystemTag: not ascii string passed"
                 | otherwise
                     = pure $ SystemTag tag
+
+-- | @SystemTag@ corresponding to the operating system/architecture pair the program was
+-- compiled in.
+-- The @System.Info@ module from @base@ was used
+-- (https://hackage.haskell.org/package/base-4.10.1.0/docs/src/System.Info.html#os)
+-- but the @os@ and @arch@ values are @String@'s. For an exhaustive list of possible
+-- platforms, see
+-- https://downloads.haskell.org/~ghc/8.0.1/docs/html/libraries/Cabal-1.24.0.0/Distribution-System.html.
+currentSystemTag :: SystemTag
+currentSystemTag =
+    let f sys | sys == "mingw32" = "win"
+              | sys == "osx"     = "mac"
+              | otherwise      = sys
+        g archt | archt == "x86_64" = "64"
+                | archt == "i386"   = "32"
+                | otherwise         = archt
+    in $(runQ [| SystemTag (toText (f os ++ g arch)) |])
 
 -- | ID of software update proposal
 type UpId = Hash UpdateProposal
