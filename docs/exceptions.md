@@ -164,9 +164,12 @@ to return `Maybe v`. In 100% pure code, use one of these ways to handle errors:
 * `MaybeT`, `ExceptT e`
 * `CatchT`
 
-Avoid using `Text` with the error message in place of `e` -- create a proper
-ADT. In case creating a proper ADT feels too cumbersome, use `CatchT`, which
-is equivalent to `ExceptT SomeException`.
+Avoid using `Text` with the error message in place of `e` -- create a
+proper ADT. In case creating a proper ADT feels too cumbersome, use
+`CatchT`, which is equivalent to `ExceptT SomeException`. Note,
+however, that using `SomeException` in pure code is not the best
+practice, because the set of all possible exceptions is statically
+known. Use it only if you are lazy to define yet another ADT.
 
 Be careful not to use `MaybeT`, `ExceptT`, and `CatchT` in potentially impure
 code. When in doubt whether the code is potentially impure, use `MonadThrow`.
@@ -174,20 +177,27 @@ code. When in doubt whether the code is potentially impure, use `MonadThrow`.
 they add additional exception mechanisms to the one that `IO` has, and
 `catch`/`bracket` don't account for this).
 
-### Impure code, regular errors
+### [Potentially] Impure code, regular errors
 
 Do *not*:
 
 * use `error` or `impureThrow`
 * use `ExceptT`, `MaybeT`, or `CatchT`
-* use `Maybe` or `Either`
 * use `MonadError`
 * use `throwIO`
+* return `m (Either e a)` if `e` has `Exception` instance
 
 Do:
 
 * create a custom exception type
 * use `throwM` (`MonadThrow`)
+
+If you want to return `m (Either e a)` from a function, it's
+recommended to define `instance TypeError "NOT AN EXC" => Exception e`
+for your type `e`. If the meaning of `e` type is not related to
+exceptional situations at all, it's not needed to define such
+instance. But for example if `e` denotes a `ParseError`, please do
+define it.
 
 We disallow the use of `throwIO` only because it is redundant in the presence of
 `throwM` and requires a stronger constraint (`MonadIO` rather than
@@ -196,7 +206,7 @@ We disallow the use of `throwIO` only because it is redundant in the presence of
 Derive prisms for exception types with multiple constructors, so it's convenient
 to use them with `catchJust`.
 
-### Impure code, programmer mistakes
+### [Potentially] Impure code, programmer mistakes
 
 Use the same techniques as in pure code -- `error` or `impureThrow`. There are
 two reasons for this:
@@ -220,8 +230,11 @@ code, avoid `forkIO` or `forkProcess` in favor of the `async` package, as it
 rethrows exceptions from the child threads. (Do not use the function `async`
 itself when you can use `withAsync`, `race`, or `concurrently`).
 
-When resource usage is non-linear, it's okay to use `ResourceT`, but prefer
-`bracket` whenever possible.
+When resource usage is non-linear, it's okay to use `ResourceT`, but
+prefer `bracket` whenever possible. Non-linear resource usage is
+anything that doesn't fit into the “allocate, use, deallocate”
+pattern.
+
 
 ## Migration
 
