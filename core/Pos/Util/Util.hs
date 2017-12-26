@@ -90,6 +90,7 @@ module Pos.Util.Util
 
        -- ** Buildable
        -- *** "Data.Time.Units" types
+       , tempMeasure
        ) where
 
 import           Universum
@@ -121,7 +122,7 @@ import           Data.List                      (last)
 import qualified Data.Semigroup                 as Smg
 import           Data.Tagged                    (Tagged (Tagged))
 import           Data.Text.Buildable            (build)
-import           Data.Time                      (getCurrentTime)
+import           Data.Time                      (diffUTCTime, getCurrentTime)
 import           Data.Time.Clock                (NominalDiffTime)
 import           Data.Time.Units                (Attosecond, Day, Femtosecond, Fortnight,
                                                  Hour, Microsecond, Millisecond, Minute,
@@ -148,9 +149,9 @@ import           System.Directory               (canonicalizePath, createDirecto
 import           System.FilePath                (normalise, pathSeparator, takeDirectory,
                                                  (</>))
 import           System.IO                      (hClose, openTempFile)
-import           System.Wlog                    (CanLog, HasLoggerName (..),
-                                                 LoggerName, LoggerNameBox (..),
-                                                 logError, usingLoggerName)
+import           System.Wlog                    (CanLog, HasLoggerName (..), LoggerName,
+                                                 LoggerNameBox (..), WithLogger, logError,
+                                                 logNotice, usingLoggerName)
 import qualified Test.QuickCheck                as QC
 import           Test.QuickCheck.Monadic        (PropertyM (..))
 
@@ -636,3 +637,14 @@ logException name = E.handleAsync (\e -> handler e >> E.throw e)
   where
     handler :: E.SomeException -> IO ()
     handler = usingLoggerName name . logError . pretty
+
+
+tempMeasure :: (MonadIO m, WithLogger m) => Text -> m a -> m a
+tempMeasure label action = do
+    before <- liftIO getCurrentTime
+    !x <- action
+    after <- liftIO getCurrentTime
+    let d :: Integer
+        d = round $ 1000 * toRational (after `diffUTCTime` before)
+    logNotice $ "tempMeasure " <> label <> ": " <> show d
+    pure x

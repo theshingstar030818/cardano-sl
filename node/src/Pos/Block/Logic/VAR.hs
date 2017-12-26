@@ -44,7 +44,7 @@ import           Pos.Ssc.Util             (toSscBlock)
 import           Pos.Txp.Settings         (TxpGlobalSettings (..))
 import           Pos.Update.Logic         (usVerifyBlocks)
 import           Pos.Update.Poll          (PollModifier)
-import           Pos.Util                 (neZipWith4, spanSafe, _neHead)
+import           Pos.Util                 (neZipWith4, spanSafe, tempMeasure, _neHead)
 import           Pos.Util.Chrono          (NE, NewestFirst (..), OldestFirst (..),
                                            toNewestFirst, toOldestFirst)
 
@@ -161,7 +161,8 @@ verifyAndApplyBlocks rollback blocks = runExceptT $ do
         when (isLeft prefixHead) $
             lift $ lrcSingleShot (prefixHead ^. epochIndexL)
         logDebug "Rolling: verifying"
-        lift (verifyBlocksPrefix prefix) >>= \case
+        verRes <- lift $ tempMeasure "VAR.verifyBlocksPrefix" $ verifyBlocksPrefix prefix
+        case verRes of
             Left (ApplyBlocksVerifyFailure -> failure)
                 | rollback  -> failWithRollback failure blunds
                 | otherwise -> do
@@ -173,7 +174,8 @@ verifyAndApplyBlocks rollback blocks = runExceptT $ do
                 let newBlunds = OldestFirst $ getOldestFirst prefix `NE.zip`
                                               getOldestFirst undos
                 logDebug "Rolling: Verification done, applying unsafe block"
-                lift $ applyBlocksUnsafe (ShouldCallBListener True) newBlunds (Just pModifier)
+                lift $ tempMeasure "VAR.applyUnsafe" $
+                    applyBlocksUnsafe (ShouldCallBListener True) newBlunds (Just pModifier)
                 case getOldestFirst suffix of
                     [] -> GS.getTip
                     (genesis:xs) -> do

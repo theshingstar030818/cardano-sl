@@ -1,5 +1,6 @@
 {-# LANGUAGE Rank2Types #-}
 
+
 module Pos.Core.Configuration
        ( ConfigurationError (..)
        , HasConfiguration

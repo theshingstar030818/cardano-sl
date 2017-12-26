@@ -30,6 +30,7 @@ import qualified Pos.DB.Block                    as DB
 import           Pos.DB.Error                    (DBError (DBMalformed))
 import           Pos.Network.Types               (Bucket, NodeId)
 import           Pos.Ssc.Class                   (SscWorkersClass)
+import           Pos.Util                        (tempMeasure)
 import           Pos.Util.Chrono                 (NewestFirst (..))
 import           Pos.WorkMode.Class              (WorkMode)
 
@@ -67,7 +68,7 @@ handleGetBlocks
     => Proxy ssc
     -> OQ.OutboundQ pack NodeId Bucket
     -> (ListenerSpec m, OutSpecs)
-handleGetBlocks (Proxy :: Proxy ssc) oq = listenerConv oq $ \__ourVerInfo nodeId conv -> do
+handleGetBlocks (Proxy :: Proxy ssc) oq = listenerConv oq $ \__ourVerInfo nodeId conv -> tempMeasure "handleGetBlocks" $ do
     -- Must tell GHC what the 'ssc' type is for the conversation.
     let _ = conv :: ConversationActions (MsgBlock ssc) MsgGetBlocks m
     mbMsg <- recvLimited conv
@@ -76,7 +77,11 @@ handleGetBlocks (Proxy :: Proxy ssc) oq = listenerConv oq $ \__ourVerInfo nodeId
             mgb nodeId
         -- We fail if we're requested to give more than
         -- recoveryHeadersMessage headers at once.
-        getHeadersRange @ssc (Just $ recoveryHeadersMessage) mgbFrom mgbTo >>= \case
+        (!headers) <-
+            tempMeasure "handleGetBlocks.getHeadersRange" $
+            force <$>
+            getHeadersRange @ssc (Just $ recoveryHeadersMessage) mgbFrom mgbTo
+        tempMeasure "handleGetBlocks.sending" $ case headers of
             Right hashes -> do
                 logDebug $ sformat
                     ("handleGetBlocks: started sending "%int%

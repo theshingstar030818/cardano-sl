@@ -59,9 +59,8 @@ import           Pos.Communication.Protocol (Conversation (..), ConversationActi
 import           Pos.Context                (BlockRetrievalQueueTag, LastKnownHeaderTag,
                                              recoveryCommGuard, recoveryInProgress)
 import           Pos.Core                   (HasConfiguration, HasHeaderHash (..),
-                                             HeaderHash, gbHeader, headerHashG,
-                                             isMoreDifficult, prevBlockL,
-                                             criticalForkThreshold)
+                                             HeaderHash, criticalForkThreshold, gbHeader,
+                                             headerHashG, isMoreDifficult, prevBlockL)
 import           Pos.Crypto                 (shortHashF)
 import           Pos.DB.Block               (blkGetHeader)
 import qualified Pos.DB.DB                  as DB
@@ -70,7 +69,7 @@ import           Pos.Exception              (cardanoExceptionFromException,
 import           Pos.Reporting.Methods      (reportMisbehaviour)
 import           Pos.Ssc.Class              (SscHelpersClass, SscWorkersClass)
 import           Pos.StateLock              (Priority (..), modifyStateLock)
-import           Pos.Util                   (inAssertMode, _neHead, _neLast)
+import           Pos.Util                   (inAssertMode, tempMeasure, _neHead, _neLast)
 import           Pos.Util.Chrono            (NE, NewestFirst (..), OldestFirst (..))
 import           Pos.Util.JsonLog           (jlAdoptedBlock)
 import           Pos.Util.TimeWarp          (CanJsonLog (..))
@@ -229,7 +228,9 @@ data MatchReqHeadersRes
     | MRUnexpected Text
       -- ^ Headers don't represent valid response to our
       -- request. Reason is attached.
-    deriving (Show)
+    deriving (Show, Generic)
+
+instance NFData MatchReqHeadersRes
 
 -- TODO This function is used ONLY in recovery mode, so passing the
 -- flag is redundant, it's always True.
@@ -271,8 +272,9 @@ requestHeaders
     -> m ()
 requestHeaders cont mgh nodeId conv = do
     logDebug $ sformat ("requestHeaders: sending "%build) mgh
-    send conv mgh
-    mHeaders <- recvLimited conv
+    mHeaders <- tempMeasure "sendReceiveHeaders" $ do
+        send conv mgh
+        recvLimited conv
     inRecovery <- recoveryInProgress
     -- TODO: it's very suspicious to see False here as requestHeaders
     -- is only called when we're in recovery mode.
@@ -297,7 +299,8 @@ requestHeaders cont mgh nodeId conv = do
                 (unitBuilder $ biSize headers)
                 nodeId
                 (map headerHash headers)
-            case matchRequestedHeaders headers mgh inRecovery of
+            tempMeasure "matchRequestedHeaders"
+              (pure $ force $ matchRequestedHeaders headers mgh inRecovery) >>= \case
                 MRGood           ->
                     handleRequestedHeaders cont inRecovery headers
                 MRUnexpected msg ->
@@ -323,7 +326,7 @@ handleRequestedHeaders
     -> NewestFirst NE (BlockHeader ssc)
     -> m ()
 handleRequestedHeaders cont inRecovery headers = do
-    classificationRes <- classifyHeaders inRecovery headers
+    classificationRes <- tempMeasure "classifyHeaders" $ classifyHeaders inRecovery headers
     let newestHeader = headers ^. _Wrapped . _neHead
         newestHash = headerHash newestHeader
         oldestHash = headerHash $ headers ^. _Wrapped . _neLast
@@ -435,8 +438,10 @@ handleBlocks nodeId blocks enqueue = do
         logInfo $
             sformat ("Processing sequence of blocks: " %listJson % "...") $
                     fmap headerHash blocks
-    maybe onNoLca (handleBlocksWithLca nodeId enqueue blocks) =<<
+    lca <-
+        tempMeasure "handleBlocks.lcaWithMainChain" $
         lcaWithMainChain (map (view blockHeader) blocks)
+    maybe onNoLca (handleBlocksWithLca nodeId enqueue blocks) lca
     inAssertMode $ logDebug $ "Finished processing sequence of blocks"
   where
     onNoLca = logWarning $
@@ -454,7 +459,9 @@ handleBlocksWithLca
 handleBlocksWithLca nodeId enqueue blocks lcaHash = do
     logDebug $ sformat lcaFmt lcaHash
     -- Head blund in result is the youngest one.
-    toRollback <- DB.loadBlundsFromTipWhile $ \blk -> headerHash blk /= lcaHash
+    toRollback <-
+        tempMeasure "handleBlocks.loadBlundsFromTipWhile" $
+        DB.loadBlundsFromTipWhile $ \blk -> headerHash blk /= lcaHash
     maybe (applyWithoutRollback enqueue blocks)
           (applyWithRollback nodeId enqueue blocks lcaHash)
           (_Wrapped nonEmpty toRollback)
@@ -467,10 +474,12 @@ applyWithoutRollback
     => EnqueueMsg m
     -> OldestFirst NE (Block ssc)
     -> m ()
-applyWithoutRollback enqueue blocks = do
+applyWithoutRollback enqueue blocks =
+  tempMeasure "handleBlocks.applyWithoutRollback" $ do
     logInfo $ sformat ("Trying to apply blocks w/o rollback: "%listJson) $
         fmap (view blockHeader) blocks
-    modifyStateLock HighPriority "applyWithoutRollback" applyWithoutRollbackDo >>= \case
+    applyRes <- modifyStateLock HighPriority "applyWithoutRollback" applyWithoutRollbackDo
+    tempMeasure "handleBlocks.afterApply" $ case applyRes of
         Left (pretty -> err) ->
             onFailedVerifyBlocks (getOldestFirst blocks) err
         Right newTip -> do
@@ -496,7 +505,9 @@ applyWithoutRollback enqueue blocks = do
         :: HeaderHash -> m (HeaderHash, Either ApplyBlocksException HeaderHash)
     applyWithoutRollbackDo curTip = do
         logInfo "Verifying and applying blocks..."
-        res <- verifyAndApplyBlocks False blocks
+        res <-
+            tempMeasure "handleBlocks.verifyAndApplyBlocks" $
+            verifyAndApplyBlocks False blocks
         logInfo "Verifying and applying blocks done"
         let newTip = either (const curTip) identity res
         pure (newTip, res)
@@ -510,7 +521,8 @@ applyWithRollback
     -> HeaderHash
     -> NewestFirst NE (Blund ssc)
     -> m ()
-applyWithRollback nodeId enqueue toApply lca toRollback = do
+applyWithRollback nodeId enqueue toApply lca toRollback =
+  tempMeasure "handleBlocks.applyWithRollback" $ do
     logInfo $ sformat ("Trying to apply blocks w/ rollback: "%listJson)
         (map (view blockHeader) toApply)
     logInfo $ sformat ("Blocks to rollback "%listJson) toRollbackHashes

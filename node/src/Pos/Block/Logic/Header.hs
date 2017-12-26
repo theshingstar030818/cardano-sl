@@ -42,7 +42,7 @@ import qualified Pos.DB.DB                 as DB
 import qualified Pos.GState                as GS
 import           Pos.Slotting.Class        (MonadSlots (getCurrentSlot))
 import           Pos.Ssc.Class             (SscHelpersClass)
-import           Pos.Util                  (_neHead, _neLast)
+import           Pos.Util                  (tempMeasure, _neHead, _neLast)
 import           Pos.Util.Chrono           (NE, NewestFirst (..), OldestFirst (..),
                                             toNewestFirst, toOldestFirst)
 
@@ -230,6 +230,7 @@ getHeadersFromManyTo ::
        , MonadError Text m
        , HasConfiguration
        , HasNodeConfiguration
+       , MonadIO m
        )
     => NonEmpty HeaderHash -- ^ Checkpoints; not guaranteed to be
                            --   in any particular order
@@ -246,6 +247,7 @@ getHeadersFromManyTo checkpoints startM = do
 
     -- This filters out invalid/unknown checkpoints also.
     inMainCheckpoints <-
+        tempMeasure "getHeadersFromManyTo.checkpoints" $
         noteM "no checkpoints are in the main chain" $
         nonEmpty <$> filterM GS.isBlockInMainChain (toList checkpoints)
     let inMainCheckpointsHashes = map headerHash inMainCheckpoints
@@ -261,11 +263,14 @@ getHeadersFromManyTo checkpoints startM = do
         -- starting with the newest header.
         else do
             newestCheckpoint <-
+                tempMeasure "getHeadersFromManyTo.newestCheckpoint" $
                 maximumBy (comparing getEpochOrSlot) . catMaybes <$>
                 mapM (DB.blkGetHeader @ssc) (toList inMainCheckpoints)
             let loadUpCond (headerHash -> curH) h =
                     curH /= startHash && h < recoveryHeadersMessage
-            up <- GS.loadHeadersUpWhile @ssc newestCheckpoint loadUpCond
+            up <-
+                tempMeasure "getHeadersFromManyTo.loadUpWhile" $
+                GS.loadHeadersUpWhile @ssc newestCheckpoint loadUpCond
             res <-
                 note "loadHeadersUpWhile returned empty list" $
                 _Wrapped nonEmpty (toNewestFirst $ over _Wrapped (drop 1) up)

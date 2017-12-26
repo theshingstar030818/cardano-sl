@@ -32,8 +32,10 @@ import qualified Pos.DB.Block               as DB
 import qualified Pos.DB.DB                  as DB
 import           Pos.Security               (AttackType (..), NodeAttackedError (..),
                                              SecurityParams (..), shouldIgnoreAddress)
+import           Pos.Util                   (tempMeasure)
 import           Pos.Util.TimeWarp          (nodeIdToAddress)
 import           Pos.WorkMode.Class         (WorkMode)
+
 
 announceBlockOuts :: OutSpecs
 announceBlockOuts = toOutSpecs [convH (Proxy :: Proxy (MsgHeaders ssc))
@@ -70,15 +72,18 @@ handleHeadersCommunication
 handleHeadersCommunication conv = do
     whenJustM (recvLimited conv) $ \mgh@(MsgGetHeaders {..}) -> do
         logDebug $ sformat ("Got request on handleGetHeaders: "%build) mgh
-        ifM recoveryInProgress onRecovery $ do
+        ifM recoveryInProgress onRecovery $ tempMeasure "handleGetHeaders" $ do
             headers <- case (mghFrom,mghTo) of
                 ([], Nothing) -> Right . one <$> getLastMainHeader
                 ([], Just h)  ->
                     maybeToRight "getBlockHeader returned Nothing" . fmap one <$>
                     DB.blkGetHeader @ssc h
                 (c1:cxs, _)   ->
-                    first ("getHeadersFromManyTo: " <>) <$>
-                    runExceptT (getHeadersFromManyTo (c1:|cxs) mghTo)
+                    tempMeasure "getHeadersFromManyTo" $ do
+                      (!r) <- first ("getHeadersFromManyTo: " <>) <$>
+                             runExceptT (getHeadersFromManyTo (c1:|cxs) mghTo)
+                      !() <- deepseq r $ logDebug "a"
+                      pure r
             either onNoHeaders handleSuccess headers
   where
     -- retrieves header of the newest main block if there's any,
@@ -91,9 +96,8 @@ handleHeadersCommunication conv = do
             Left _  -> fromMaybe tipHeader <$> DB.blkGetHeader (tip ^. prevBlockL)
             Right _ -> pure tipHeader
     handleSuccess h = do
-        send conv (MsgHeaders h)
+        tempMeasure "handleGetHeadersResponse" $ send conv (MsgHeaders h)
         logDebug "handleGetHeaders: responded successfully"
-        handleHeadersCommunication conv
     onNoHeaders reason = do
         let err = "handleGetHeaders: couldn't retrieve headers, reason: " <> reason
         logWarning err

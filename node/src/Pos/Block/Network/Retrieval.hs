@@ -46,10 +46,10 @@ import           Pos.Core                   (HasHeaderHash (..), HeaderHash, dif
                                              isMoreDifficult, prevBlockL)
 import           Pos.Crypto                 (shortHashF)
 import           Pos.Reporting              (reportOrLogE, reportOrLogW)
-import           Pos.Slotting.Util          (getCurrentEpochSlotDuration)
 import           Pos.Shutdown               (runIfNotShutdown)
+import           Pos.Slotting.Util          (getCurrentEpochSlotDuration)
 import           Pos.Ssc.Class              (SscWorkersClass)
-import           Pos.Util                   (_neHead, _neLast)
+import           Pos.Util                   (tempMeasure, _neHead, _neLast)
 import           Pos.Util.Chrono            (NE, NewestFirst (..), OldestFirst (..),
                                              _NewestFirst, _OldestFirst)
 import           Pos.Util.Timer             (Timer, setTimerDuration, startTimer)
@@ -107,7 +107,7 @@ retrievalWorkerImpl keepAliveTimer SendActions {..} =
         slotDuration <- fromIntegral . toMicroseconds <$> getCurrentEpochSlotDuration
         setTimerDuration keepAliveTimer $ 3 * slotDuration
         startTimer keepAliveTimer
-        thingToDoNext
+        tempMeasure "mainLoopGeneral" thingToDoNext
         mainLoop
     mainLoopE e = do
         -- REPORT:ERROR 'reportOrLogE' in block retrieval worker.
@@ -125,14 +125,14 @@ retrievalWorkerImpl keepAliveTimer SendActions {..} =
         processContHeader enqueueMsg nodeId header
     handleAlternative nodeId header = do
         logDebug $ "handleAlternative: " <> pretty header
-        mhrr <- mkHeadersRequest (headerHash header)
+        mhrr <- tempMeasure "createHeadersRequest" $ mkHeadersRequest (headerHash header)
         case mhrr of
             MhrrBlockAdopted ->
                 logDebug "Block already adopted, nothing to be done"
             MhrrWithCheckpoints mgh -> do
                 logDebug "Checkpoints available, headers request assembled"
                 handleHeadersRequest nodeId header mgh
-    handleHeadersRequest nodeId header mgh = do
+    handleHeadersRequest nodeId header mgh = tempMeasure "handleHeadersRequest" $ do
         updateRecoveryHeader nodeId header
         let cont (headers :: NewestFirst NE (BlockHeader ssc)) =
                 let oldestHeader = headers ^. _NewestFirst . _neLast
@@ -294,7 +294,7 @@ handleCHsValid
     -> BlockHeader ssc
     -> HeaderHash
     -> m ()
-handleCHsValid enqueue nodeId lcaChild newestHash = do
+handleCHsValid enqueue nodeId lcaChild newestHash = tempMeasure "handleCHsValid" $ do
     -- The conversation will attempt to retrieve the necessary blocks and apply
     -- them. Each one gives a 'Bool' where 'True' means that a recovery was
     -- completed (depends upon the state of the recovery-mode TMVar).
@@ -304,8 +304,10 @@ handleCHsValid enqueue nodeId lcaChild newestHash = do
         logDebug $ sformat ("Requesting blocks from "%shortHashF%" to "%shortHashF)
                            lcaChildHash
                            newestHash
-        send conv $ mkBlocksRequest lcaChildHash newestHash
-        chainE <- runExceptT (retrieveBlocks conv lcaChild newestHash)
+        chainE <-
+            tempMeasure "sendReceiveBlocks" $ do
+                send conv $ mkBlocksRequest lcaChildHash newestHash
+                runExceptT (retrieveBlocks conv lcaChild newestHash)
         recHeaderVar <- view (lensOf @RecoveryHeaderTag)
         case chainE of
             Left e -> do
@@ -321,7 +323,7 @@ handleCHsValid enqueue nodeId lcaChild newestHash = do
                     (blocks ^. _OldestFirst . to NE.length)
                     (unitBuilder $ biSize blocks)
                     (map (headerHash . view blockHeader) blocks)
-                handleBlocks nodeId blocks enqueue
+                tempMeasure "handleBlocks" $ handleBlocks nodeId blocks enqueue
                 dropUpdateHeader
                 -- If we've downloaded any block with bigger
                 -- difficulty than ncrecoveryheader, we're

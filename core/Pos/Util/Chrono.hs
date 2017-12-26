@@ -36,13 +36,13 @@ newtype NewestFirst f a = NewestFirst {getNewestFirst :: f a}
             Functor, Foldable, Traversable,
             Container, NontrivialContainer,
             Binary, Bi,
-            Arbitrary)
+            Arbitrary, NFData)
 newtype OldestFirst f a = OldestFirst {getOldestFirst :: f a}
   deriving (Eq, Ord, Show,
             Functor, Foldable, Traversable,
             Container, NontrivialContainer,
             Binary, Bi,
-            Arbitrary)
+            Arbitrary, NFData)
 
 makePrisms  ''NewestFirst
 makeWrapped ''NewestFirst
