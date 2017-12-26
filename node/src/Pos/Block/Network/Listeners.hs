@@ -16,7 +16,7 @@ import           Universum
 
 import           Pos.Binary.Communication        (msgBlockPrefix)
 import           Pos.Block.Logic                 (getHeadersRange)
-import           Pos.Block.Network.Announce      (handleHeadersCommunication)
+import           Pos.Block.Network.Announce      (handleHeadersCommunication, tempMeasure)
 import           Pos.Block.Network.Logic         (handleUnsolicitedHeaders)
 import           Pos.Block.Network.Types         (MsgBlock (..), MsgGetBlocks (..),
                                                   MsgGetHeaders, MsgHeaders (..))
@@ -67,7 +67,7 @@ handleGetBlocks
     => Proxy ssc
     -> OQ.OutboundQ pack NodeId Bucket
     -> (ListenerSpec m, OutSpecs)
-handleGetBlocks (Proxy :: Proxy ssc) oq = listenerConv oq $ \__ourVerInfo nodeId conv -> do
+handleGetBlocks (Proxy :: Proxy ssc) oq = listenerConv oq $ \__ourVerInfo nodeId conv -> tempMeasure "handleGetBlocks" $ do
     -- Must tell GHC what the 'ssc' type is for the conversation.
     let _ = conv :: ConversationActions (MsgBlock ssc) MsgGetBlocks m
     mbMsg <- recvLimited conv

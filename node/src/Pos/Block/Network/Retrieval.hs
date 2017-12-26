@@ -27,7 +27,7 @@ import           Pos.Binary.Class           (biSize)
 import           Pos.Binary.Communication   ()
 import           Pos.Block.Core             (Block, BlockHeader, blockHeader)
 import           Pos.Block.Logic            (ClassifyHeaderRes (..), classifyNewHeader)
-import           Pos.Block.Network.Announce (announceBlockOuts)
+import           Pos.Block.Network.Announce (announceBlockOuts, tempMeasure)
 import           Pos.Block.Network.Logic    (BlockNetLogicException (DialogUnexpected),
                                              MkHeadersRequestResult (..), handleBlocks,
                                              mkBlocksRequest, mkHeadersRequest,
@@ -98,7 +98,7 @@ retrievalWorkerImpl SendActions {..} =
                     pure (handleBlockRetrievalFromQueue nodeId task)
                 (_, Just (nodeId, rHeader))  ->
                     pure (handleHeadersRecovery nodeId rHeader)
-        thingToDoNext
+        tempMeasure "mainLoopGeneral" thingToDoNext
         mainLoop
     mainLoopE e = do
         -- REPORT:ERROR 'reportOrLogE' in block retrieval worker.
@@ -285,7 +285,7 @@ handleCHsValid
     -> BlockHeader ssc
     -> HeaderHash
     -> m ()
-handleCHsValid enqueue nodeId lcaChild newestHash = do
+handleCHsValid enqueue nodeId lcaChild newestHash = tempMeasure "handleCHsValid" $ do
     -- The conversation will attempt to retrieve the necessary blocks and apply
     -- them. Each one gives a 'Bool' where 'True' means that a recovery was
     -- completed (depends upon the state of the recovery-mode TMVar).
