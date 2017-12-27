@@ -14996,7 +14996,7 @@ devnet: &devnet
     <<: *mainnet_base_node
     networkDiameter: 18 # should be slightly less than slot duration
     mdNoBlocksSlotThreshold: 5 # should be less than 2 * k
-    recoveryHeadersMessage: 3000 # should be greater than k
+    recoveryHeadersMessage: 16000 # should be greater than k
 
 ##############################################################################
 ##                                                                          ##
