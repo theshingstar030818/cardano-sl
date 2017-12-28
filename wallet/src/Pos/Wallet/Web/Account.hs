@@ -8,6 +8,7 @@ module Pos.Wallet.Web.Account
        , genSaveRootKey
        , genUniqueAccountId
        , genUniqueAddress
+       , genUniqueFalseAddresses
        , deriveAddressSK
        , deriveAddress
        , AccountMode
@@ -17,7 +18,7 @@ module Pos.Wallet.Web.Account
        , MonadKeySearch (..)
        ) where
 
-import           Control.Monad.Except (MonadError (throwError), runExceptT)
+import           Control.Monad.Except (Except, MonadError (throwError), runExcept)
 import           Formatting (build, sformat, (%))
 import           System.Random (randomRIO)
 import           System.Wlog (WithLogger)
@@ -25,11 +26,13 @@ import           Universum
 
 import           Pos.Client.KeyStorage (AllUserSecrets (..), MonadKeys, MonadKeysRead, addSecretKey,
                                         getSecretKeys, getSecretKeysPlain)
-import           Pos.Core (Address (..), IsBootstrapEraAddr (..), deriveLvl2KeyPair)
-import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ShouldCheckPassphrase (..), firstHardened)
+import           Pos.Core (Address (..), FalseAddressTag, IsBootstrapEraAddr (..),
+                           deriveFalseLvl2KeyPairs, deriveLvl2KeyPair)
+import           Pos.Crypto (EncryptedSecretKey, PassPhrase, ShouldCheckPassphrase (..),
+                             firstHardened)
 import           Pos.Util (eitherToThrow)
 import           Pos.Util.BackupPhrase (BackupPhrase, safeKeysFromPhrase)
-import           Pos.Wallet.Web.ClientTypes (AccountId (..), CId, CWAddressMeta (..), Wal,
+import           Pos.Wallet.Web.ClientTypes (AccountId (..), Addr, CId, CWAddressMeta (..), Wal,
                                              addrMetaToAccount, addressToCId, encToCId)
 import           Pos.Wallet.Web.Error (WalletError (..))
 import           Pos.Wallet.Web.State (AddressLookupMode (Ever), MonadWalletDBRead,
@@ -45,13 +48,19 @@ type AccountMode ctx m =
 myRootAddresses :: MonadKeysRead m => m [CId Wal]
 myRootAddresses = encToCId <<$>> getSecretKeysPlain
 
+-- | Helper to lift pure functions which work with key storage.
+withKeyStorage
+    :: (MonadKeysRead m, MonadThrow m)
+    => (AllUserSecrets -> Except WalletError a) -> m a
+withKeyStorage action = do
+    secrets <- getSecretKeys
+    eitherToThrow $ runExcept (action secrets)
+
 getSKById
     :: AccountMode ctx m
     => CId Wal
     -> m EncryptedSecretKey
-getSKById wid = do
-    secrets <- getSecretKeys
-    runExceptT (getSKByIdPure secrets wid) >>= eitherToThrow
+getSKById wid = withKeyStorage $ \secrets -> getSKByIdPure secrets wid
 
 getSKByIdPure
     :: MonadError WalletError m
@@ -71,8 +80,8 @@ getSKByAddress
     -> CWAddressMeta
     -> m EncryptedSecretKey
 getSKByAddress scp passphrase addrMeta = do
-    secrets <- getSecretKeys
-    runExceptT (getSKByAddressPure secrets scp passphrase addrMeta) >>= eitherToThrow
+    withKeyStorage $ \secrets ->
+        getSKByAddressPure secrets scp passphrase addrMeta
 
 getSKByAddressPure
     :: MonadError WalletError m
@@ -164,6 +173,22 @@ genUniqueAddress genSeed passphrase wCAddr@AccountId{..} =
         deriveAddress passphrase wCAddr cwamAddressIndex
     notFit _idx addr = doesWAddressExist Ever addr
 
+genUniqueFalseAddresses
+    :: AccountMode ctx m
+    => [FalseAddressTag]
+    -> AddrGenSeed
+    -> PassPhrase
+    -> AccountId
+    -> m [CWAddressMeta]
+genUniqueFalseAddresses tags genSeed passphrase wCAddr@AccountId{..} =
+    generateUnique "address generation" genSeed mkAddress notFit
+  where
+    mkAddress :: AccountMode ctx m => Word32 -> m [CWAddressMeta]
+    mkAddress cwamAddressIndex = do
+        mkAddr <- deriveFalseAddresses passphrase wCAddr cwamAddressIndex
+        return $ map mkAddr tags
+    notFit _idx addrs = fmap or $ mapM (doesWAddressExist Ever) addrs
+
 deriveAddressSK
     :: AccountMode ctx m
     => ShouldCheckPassphrase
@@ -171,9 +196,9 @@ deriveAddressSK
     -> AccountId
     -> Word32
     -> m (Address, EncryptedSecretKey)
-deriveAddressSK scp passphrase accId addressIndex = do
-    secrets <- getSecretKeys
-    runExceptT (deriveAddressSKPure secrets scp passphrase accId addressIndex) >>= eitherToThrow
+deriveAddressSK scp passphrase accId addressIndex =
+    withKeyStorage $ \secrets ->
+        deriveAddressSKPure secrets scp passphrase accId addressIndex
 
 deriveAddressSKPure
     :: MonadError WalletError m
@@ -196,18 +221,55 @@ deriveAddressSKPure secrets scp passphrase AccountId {..} addressIndex = do
   where
     badPass = RequestError "Passphrase doesn't match"
 
+deriveFalseAddressesSKPure
+    :: MonadError WalletError m
+    => AllUserSecrets
+    -> PassPhrase
+    -> AccountId
+    -> Word32
+    -> m (FalseAddressTag -> (Address, EncryptedSecretKey))
+deriveFalseAddressesSKPure secrets passphrase AccountId {..} addressIndex = do
+    key <- getSKByIdPure secrets aiWId
+    maybe (throwError badPass) pure $
+        deriveFalseLvl2KeyPairs
+            passphrase
+            key
+            aiIndex
+            addressIndex
+  where
+    badPass = RequestError "Passphrase doesn't match"
+
+makeWAddressMeta :: AccountId -> Word32 -> CId Addr -> CWAddressMeta
+makeWAddressMeta AccountId{..} addressIndex address =
+    CWAddressMeta
+    { cwamWId = aiWId
+    , cwamAccountIndex = aiIndex
+    , cwamAddressIndex = addressIndex
+    , cwamId = address
+    }
+
 deriveAddress
     :: AccountMode ctx m
     => PassPhrase
     -> AccountId
     -> Word32
     -> m CWAddressMeta
-deriveAddress passphrase accId@AccountId{..} cwamAddressIndex = do
-    (addr, _) <- deriveAddressSK (ShouldCheckPassphrase True) passphrase accId cwamAddressIndex
-    let cwamWId         = aiWId
-        cwamAccountIndex = aiIndex
-        cwamId          = addressToCId addr
-    return CWAddressMeta{..}
+deriveAddress passphrase accId addressIndex = do
+    (addr, _) <- deriveAddressSK (ShouldCheckPassphrase True) passphrase accId addressIndex
+    return $ makeWAddressMeta accId addressIndex (addressToCId addr)
+
+deriveFalseAddresses
+    :: AccountMode ctx m
+    => PassPhrase
+    -> AccountId
+    -> Word32
+    -> m (FalseAddressTag -> CWAddressMeta)
+deriveFalseAddresses passphrase accId addressIndex = do
+    mkAddr <- withKeyStorage $ \secrets ->
+        deriveFalseAddressesSKPure secrets passphrase accId addressIndex
+    return $ \tag ->
+        let (addr, _) = mkAddr tag
+        in  makeWAddressMeta accId addressIndex (addressToCId addr)
 
 -- | Allows to find a key related to given @id@ item.
 class MonadKeySearch id m where

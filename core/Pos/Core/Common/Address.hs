@@ -21,6 +21,7 @@ module Pos.Core.Common.Address
        , addrSpendingDataToType
        , addrAttributesUnwrapped
        , deriveLvl2KeyPair
+       , deriveFalseLvl2KeyPairs
        , deriveFirstHDAddress
 
        -- * Pattern-matching helpers
@@ -40,6 +41,8 @@ module Pos.Core.Common.Address
 
        , createHDAddressNH
        , createHDAddressH
+       , FalseAddressTag
+       , createFalseHDAddressesH
 
        -- * Maximal sizes (needed for tx creation)
        , largestPubKeyAddressBoot
@@ -73,7 +76,8 @@ import           Pos.Binary.Crypto ()
 import           Pos.Core.Common.Coin ()
 import           Pos.Core.Common.Types (AddrAttributes (..), AddrSpendingData (..),
                                         AddrStakeDistribution (..), AddrType (..), Address (..),
-                                        Address' (..), AddressHash, Script, StakeholderId)
+                                        Address' (..), AddressHash, Script, StakeholderId,
+                                        unsafeCoinPortionFromDouble)
 import           Pos.Core.Constants (accountGenesisIndex, wAddressGenesisIndex)
 import           Pos.Crypto.Hashing (AbstractHash (AbstractHash), hashHexF, shortHashF)
 import           Pos.Crypto.HD (HDAddressPayload, HDPassphrase, ShouldCheckPassphrase (..),
@@ -184,7 +188,9 @@ newtype IsBootstrapEraAddr = IsBootstrapEraAddr Bool
 
 -- | A function for making an address from 'PublicKey'.
 makePubKeyAddress :: Bi Address' => IsBootstrapEraAddr -> PublicKey -> Address
-makePubKeyAddress = makePubKeyAddressImpl Nothing
+makePubKeyAddress ibea key = makePubKeyAddressImpl Nothing distr key
+  where
+    distr = makeAddrStakeDistr ibea key
 
 -- | A function for making an address from 'PublicKey' for bootstrap era.
 makePubKeyAddressBoot :: Bi Address' => PublicKey -> Address
@@ -201,27 +207,29 @@ makeRootPubKeyAddress = makePubKeyAddressBoot
 -- | A function for making an HDW address.
 makePubKeyHdwAddress
     :: Bi Address'
-    => IsBootstrapEraAddr
+    => AddrStakeDistribution
     -> HDAddressPayload    -- ^ Derivation path
     -> PublicKey
     -> Address
-makePubKeyHdwAddress ibe path = makePubKeyAddressImpl (Just path) ibe
+makePubKeyHdwAddress distr path = makePubKeyAddressImpl (Just path) distr
 
 makePubKeyAddressImpl
     :: Bi Address'
     => Maybe HDAddressPayload
-    -> IsBootstrapEraAddr
+    -> AddrStakeDistribution
     -> PublicKey
     -> Address
-makePubKeyAddressImpl path (IsBootstrapEraAddr isBootstrapEra) key =
+makePubKeyAddressImpl path distr key =
     makeAddress spendingData attrs
   where
     spendingData = PubKeyASD key
-    distr
-        | isBootstrapEra = BootstrapEraDistr
-        | otherwise = SingleKeyDistr (addressHash key)
     attrs =
         AddrAttributes {aaStakeDistribution = distr, aaPkDerivationPath = path}
+
+makeAddrStakeDistr :: IsBootstrapEraAddr -> PublicKey -> AddrStakeDistribution
+makeAddrStakeDistr (IsBootstrapEraAddr isBootstrapEra) key
+    | isBootstrapEra = BootstrapEraDistr
+    | otherwise = SingleKeyDistr (addressHash key)
 
 -- | A function for making an address from a validation 'Script'.  It
 -- takes an optional 'StakeholderId'. If it's given, it will receive
@@ -258,7 +266,8 @@ createHDAddressH ibea scp passphrase hdPassphrase parent parentPath childIndex =
     derivedSK <- deriveHDSecretKey scp passphrase parent childIndex
     let addressPayload = packHDAddressAttr hdPassphrase $ parentPath ++ [childIndex]
     let pk = encToPublic derivedSK
-    return (makePubKeyHdwAddress ibea addressPayload pk, derivedSK)
+    let distr = makeAddrStakeDistr ibea pk
+    return (makePubKeyHdwAddress distr addressPayload pk, derivedSK)
 
 -- | Create address from public key via non-hardened way.
 createHDAddressNH
@@ -272,7 +281,33 @@ createHDAddressNH
 createHDAddressNH ibea passphrase parent parentPath childIndex = do
     let derivedPK = deriveHDPublicKey parent childIndex
     let addressPayload = packHDAddressAttr passphrase $ parentPath ++ [childIndex]
-    (makePubKeyHdwAddress ibea addressPayload derivedPK, derivedPK)
+    let distr = makeAddrStakeDistr ibea derivedPK
+    (makePubKeyHdwAddress distr addressPayload derivedPK, derivedPK)
+
+-- | Used to generate multiple slighly different addresses.
+newtype FalseAddressTag = FalseAddressTag Word32
+    deriving (Eq, Show, Num, Enum)
+
+-- | Create packs of addresses quickly from secret key in hardened way.
+-- For benchmarking purposes.
+createFalseHDAddressesH
+    :: Bi Address'
+    => ShouldCheckPassphrase
+    -> PassPhrase
+    -> HDPassphrase
+    -> EncryptedSecretKey
+    -> [Word32]
+    -> Word32
+    -> Maybe (FalseAddressTag -> (Address, EncryptedSecretKey))
+createFalseHDAddressesH scp passphrase hdPassphrase parent parentPath childIndex = do
+    derivedSK <- deriveHDSecretKey scp passphrase parent childIndex
+    let addressPayload = packHDAddressAttr hdPassphrase $ parentPath ++ [childIndex]
+    let pk = encToPublic derivedSK
+    return $ \(FalseAddressTag tag) ->
+        let coinPortion = unsafeCoinPortionFromDouble $
+                          ((/) `on` fromIntegral) tag maxBound
+            distr = UnsafeMultiKeyDistr $ one (addressHash pk, coinPortion)
+        in  (makePubKeyHdwAddress distr addressPayload pk, derivedSK)
 
 ----------------------------------------------------------------------------
 -- Checks
@@ -345,6 +380,20 @@ deriveLvl2KeyPair ibea scp passphrase wsKey accountIndex addressIndex = do
     let hdPass = deriveHDPassphrase $ encToPublic wsKey
     -- We don't need to check passphrase twice
     createHDAddressH ibea (ShouldCheckPassphrase False) passphrase hdPass wKey [accountIndex] addressIndex
+
+-- | Makes account secret key for given wallet set.
+deriveFalseLvl2KeyPairs
+    :: Bi Address'
+    => PassPhrase
+    -> EncryptedSecretKey -- ^ key of wallet
+    -> Word32 -- ^ account derivation index
+    -> Word32 -- ^ address derivation index
+    -> Maybe (FalseAddressTag -> (Address, EncryptedSecretKey))
+deriveFalseLvl2KeyPairs passphrase wsKey accountIndex addressIndex = do
+    let scp = ShouldCheckPassphrase False
+    wKey <- deriveHDSecretKey scp passphrase wsKey accountIndex
+    let hdPass = deriveHDPassphrase $ encToPublic wsKey
+    createFalseHDAddressesH scp passphrase hdPass wKey [accountIndex] addressIndex
 
 deriveFirstHDAddress
     :: Bi Address'
