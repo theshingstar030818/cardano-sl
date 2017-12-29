@@ -65,6 +65,7 @@ import qualified Crypto.Hash as CryptoHash
 import qualified Data.ByteString as BS
 import           Data.ByteString.Base58 (Alphabet (..), bitcoinAlphabet, decodeBase58, encodeBase58)
 import           Data.Hashable (Hashable (..))
+import qualified Data.Map as M
 import qualified Data.Text.Buildable as Buildable
 import           Formatting (Format, bprint, build, builder, int, later, (%))
 import           Serokell.Data.Memory.Units (Byte)
@@ -77,7 +78,7 @@ import           Pos.Core.Common.Coin ()
 import           Pos.Core.Common.Types (AddrAttributes (..), AddrSpendingData (..),
                                         AddrStakeDistribution (..), AddrType (..), Address (..),
                                         Address' (..), AddressHash, Script, StakeholderId,
-                                        unsafeCoinPortionFromDouble)
+                                        complementaryCoinPortion, unsafeCoinPortionFromDouble)
 import           Pos.Core.Constants (accountGenesisIndex, wAddressGenesisIndex)
 import           Pos.Crypto.Hashing (AbstractHash (AbstractHash), hashHexF, shortHashF)
 import           Pos.Crypto.HD (HDAddressPayload, HDPassphrase, ShouldCheckPassphrase (..),
@@ -306,7 +307,14 @@ createFalseHDAddressesH scp passphrase hdPassphrase parent parentPath childIndex
     return $ \(FalseAddressTag tag) ->
         let coinPortion = unsafeCoinPortionFromDouble $
                           ((/) `on` fromIntegral) tag maxBound
-            distr = UnsafeMultiKeyDistr $ one (addressHash pk, coinPortion)
+            distr = UnsafeMultiKeyDistr $ M.fromList
+                [ ( addressHash pk
+                  , coinPortion
+                  )
+                , ( unsafeAddressHash (pk, "the cake is a lie" :: Text)
+                  , (complementaryCoinPortion coinPortion)
+                  )
+                ]
         in  (makePubKeyHdwAddress distr addressPayload pk, derivedSK)
 
 ----------------------------------------------------------------------------

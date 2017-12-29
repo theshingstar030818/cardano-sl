@@ -33,7 +33,6 @@ import           Pos.Launcher.Runner (runRealBasedMode)
 import           Pos.Util.CompileInfo (HasCompileInfo)
 import           Pos.Util.TimeWarp (NetworkAddress)
 import           Pos.Wallet.WalletMode (WalletMempoolExt)
-import           Pos.Wallet.Web.Methods (addInitialRichAccount)
 import           Pos.Wallet.Web.Mode (WalletWebMode, WalletWebModeContext (..),
                                       WalletWebModeContextTag)
 import           Pos.Wallet.Web.Server.Launcher (walletApplication, walletServeImpl, walletServer)
@@ -68,14 +67,13 @@ walletServeWebFull
     -> NetworkAddress    -- ^ IP and Port to listen
     -> Maybe TlsParams
     -> WalletWebMode ()
-walletServeWebFull sendActions debug = walletServeImpl action
+walletServeWebFull sendActions _debug = walletServeImpl action
   where
     action :: WalletWebMode Application
     action = do
         logInfo "DAEDALUS has STARTED!"
         saVar <- asks wwmcSendActions
         atomically $ STM.putTMVar saVar sendActions
-        when debug $ addInitialRichAccount 0
 
         wwmc <- walletWebModeContext
         walletApplication $

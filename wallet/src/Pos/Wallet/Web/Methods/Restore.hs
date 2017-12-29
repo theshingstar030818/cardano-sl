@@ -6,7 +6,7 @@ module Pos.Wallet.Web.Methods.Restore
        ( newWallet
        , importWallet
        , restoreWallet
-       , addInitialRichAccount
+       , addInitialWalletWithMoney
 
        -- For testing
        , importWalletDo
@@ -15,11 +15,9 @@ module Pos.Wallet.Web.Methods.Restore
 import           Universum
 
 import           Control.Lens (ix, traversed)
-import qualified Control.Monad.Catch as E
 import           Data.Default (Default (def))
 import           Formatting (build, sformat, (%))
 import           System.IO.Error (isDoesNotExistError)
-import           System.Wlog (logDebug)
 
 import           Pos.Client.KeyStorage (addSecretKey)
 import           Pos.Core.Configuration (genesisSecretsPoor)
@@ -141,16 +139,14 @@ importWalletSecret passphrase WalletUserSecret{..} = do
 
 -- | Creates wallet with given genesis hd-wallet key.
 -- For debug purposes
-addInitialRichAccount :: L.MonadWalletLogic ctx m => Int -> m ()
-addInitialRichAccount keyId =
-    E.handleAll wSetExistsHandler $ do
-        let hdwSecretKeys = fromMaybe (error "Hdw secrets keys are unknown") genesisSecretsPoor
-        key <- maybeThrow noKey (map poorSecretToEncKey $ hdwSecretKeys ^? ix keyId)
-        void $ importWalletSecret emptyPassphrase $
-            mkGenesisWalletUserSecret key
-                & wusWalletName .~ "Precreated wallet full of money"
-                & wusAccounts . traversed . _2 .~ "Initial account"
+addInitialWalletWithMoney :: L.MonadWalletLogic ctx m => Int -> m (CId Wal)
+addInitialWalletWithMoney keyId = do
+    let hdwSecretKeys = fromMaybe (error "Hdw secrets keys are unknown") genesisSecretsPoor
+    key <- maybeThrow noKey (map poorSecretToEncKey $ hdwSecretKeys ^? ix keyId)
+    CWallet{..} <- importWalletSecret emptyPassphrase $
+        mkGenesisWalletUserSecret key
+            & wusWalletName .~ "Precreated wallet full of money"
+            & wusAccounts . traversed . _2 .~ "Initial account"
+    return cwId
   where
     noKey = InternalError $ sformat ("No genesis key #" %build) keyId
-    wSetExistsHandler =
-        logDebug . sformat ("Creation of initial wallet was skipped (" %build % ")")

@@ -39,6 +39,7 @@ module Pos.Core.Common.Types
        , coinPortionDenominator
        , mkCoinPortion
        , unsafeCoinPortionFromDouble
+       , complementaryCoinPortion
        , maxCoinVal
 
        -- * Scripting
@@ -331,6 +332,12 @@ unsafeCoinPortionFromDouble x
   where
     v = round $ realToFrac coinPortionDenominator * x
 {-# INLINE unsafeCoinPortionFromDouble #-}
+
+-- | Substract given CoinPortion from 1. This opeartion is always accurate
+-- and safe.
+complementaryCoinPortion :: CoinPortion -> CoinPortion
+complementaryCoinPortion (CoinPortion cp) =
+    CoinPortion $ coinPortionDenominator - cp
 
 ----------------------------------------------------------------------------
 -- Script
