@@ -53,7 +53,7 @@ module Pos.Core.Types
 
        -- * Coin
        , Coin
-       , CoinPortion
+       , CoinPortion (..)
        , coinF
        , unsafeGetCoin
        , getCoinPortion

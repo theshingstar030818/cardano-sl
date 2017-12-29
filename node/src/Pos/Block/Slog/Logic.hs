@@ -53,7 +53,8 @@ import qualified Pos.Lrc.DB               as LrcDB
 import           Pos.Slotting             (MonadSlots (getCurrentSlot))
 import           Pos.Ssc.Class.Helpers    (SscHelpersClass (..))
 import           Pos.Update.Configuration (HasUpdateConfiguration, lastKnownBlockVersion)
-import           Pos.Util                 (HasLens (..), inAssertMode, _neHead, _neLast)
+import           Pos.Util                 (HasLens (..), inAssertMode, tempMeasure,
+                                           _neHead, _neLast)
 import           Pos.Util.Chrono          (NE, NewestFirst (getNewestFirst),
                                            OldestFirst (..), toOldestFirst)
 
@@ -213,19 +214,23 @@ slogApplyBlocks (ShouldCallBListener callBListener) blunds = do
     -- BlockDB. If program is interrupted after we put blunds and
     -- before we update GState, this invariant won't be violated. If
     -- we update GState first, this invariant may be violated.
-    mapM_ dbPutBlund blunds
+    tempMeasure "applyBlocksUnsafe.slog.dbPutBlunds" $ mapM_ dbPutBlund blunds
     -- If the program is interrupted at this point (after putting on
     -- block), we will have a garbage block in BlockDB, but it's not a
     -- problem.
-    bListenerBatch <- if callBListener then onApplyBlocks blunds
-                      else pure mempty
+    bListenerBatch <-
+        tempMeasure "applyBlocksUnsafe.slog.blistenerblund" $
+        if callBListener then onApplyBlocks blunds
+        else pure mempty
 
     let newestBlock = NE.last $ getOldestFirst blunds
         newestDifficulty = newestBlock ^. difficultyL
     let putTip = SomeBatchOp $ GS.PutTip $ headerHash newestBlock
-    lastSlots <- slogGetLastSlots
-    slogCommon @ssc (newLastSlots lastSlots)
-    putDifficulty <- GS.getMaxSeenDifficulty <&> \x ->
+    lastSlots <- tempMeasure "applyBlocksUnsafe.slog.slogGetLastSlots" $ slogGetLastSlots
+    tempMeasure "applyBlocksUnsafe.slog.slogCommon" $ slogCommon @ssc (newLastSlots lastSlots)
+    putDifficulty <-
+        tempMeasure "applyBlocksUnsafe.slog.putDifficulty" $
+        GS.getMaxSeenDifficulty <&> \x ->
         SomeBatchOp [GS.PutMaxSeenDifficulty newestDifficulty
                         | newestDifficulty > x]
     return $ SomeBatchOp

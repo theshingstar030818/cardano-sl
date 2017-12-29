@@ -2,20 +2,20 @@ module Pos.Binary.Core.Types () where
 
 import           Universum
 
-import           Data.Time.Units            (Millisecond)
-import           Serokell.Data.Memory.Units (Byte)
+import           Data.Time.Units                 (Millisecond)
+import           Serokell.Data.Memory.Units      (Byte)
 
-import           Pos.Binary.Class           (Bi (..), Cons (..), Field (..),
-                                             deriveSimpleBi, deriveSimpleBiCxt)
-import           Pos.Binary.Core.Coin       ()
-import           Pos.Binary.Core.Fee        ()
-import           Pos.Binary.Core.Script     ()
-import           Pos.Binary.Core.Version    ()
+import           Pos.Binary.Class                (Bi (..), Cons (..), Field (..),
+                                                  deriveSimpleBi, deriveSimpleBiCxt)
+import           Pos.Binary.Core.Coin            ()
+import           Pos.Binary.Core.Fee             ()
+import           Pos.Binary.Core.Script          ()
+import           Pos.Binary.Core.Version         ()
 import           Pos.Core.Configuration.Protocol (HasProtocolConstants)
-import qualified Pos.Core.Fee               as T
-import qualified Pos.Core.Slotting          as T
-import qualified Pos.Core.Types             as T
-import qualified Pos.Data.Attributes        as A
+import qualified Pos.Core.Fee                    as T
+import qualified Pos.Core.Slotting               as T
+import qualified Pos.Core.Types                  as T
+import qualified Pos.Data.Attributes             as A
 
 -- kind of boilerplate, but anyway that's what it was made for --
 -- verbosity and clarity
@@ -38,19 +38,11 @@ instance Bi (A.Attributes ()) where
 
 instance Bi T.CoinPortion where
   encode = encode . T.getCoinPortion
-  decode = do
-    word64 <- decode @Word64
-    case T.mkCoinPortion word64 of
-      Left err          -> fail err
-      Right coinPortion -> return coinPortion
+  decode = T.CoinPortion <$> decode @Word64
 
 instance HasProtocolConstants => Bi T.LocalSlotIndex where
     encode = encode . T.getSlotIndex
-    decode = do
-        word16 <- decode @Word16
-        case T.mkLocalSlotIndex word16 of
-            Left err        -> fail ("decode@LocalSlotIndex: " <> toString err)
-            Right slotIndex -> return slotIndex
+    decode = T.UnsafeLocalSlotIndex <$> decode @Word16
 
 deriveSimpleBiCxt [t| HasProtocolConstants |] ''T.SlotId [
     Cons 'T.SlotId [

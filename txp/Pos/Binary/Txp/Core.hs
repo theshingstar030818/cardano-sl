@@ -54,10 +54,7 @@ instance Bi T.Tx where
                 <> encode (T._txAttributes tx)
     decode = do
         enforceSize "Tx" 3
-        res <- T.mkTx <$> decode <*> decode <*> decode
-        case res of
-            Left e   -> fail e
-            Right tx -> pure tx
+        T.UnsafeTx <$> decode <*> decode <*> decode
 
 instance Bi T.TxInWitness where
     encode input = case input of

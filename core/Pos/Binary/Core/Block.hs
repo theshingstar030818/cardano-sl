@@ -10,7 +10,6 @@ import           Pos.Binary.Class                (Bi (..), encodeListLen, enforc
 import qualified Pos.Core.Block                  as T
 import           Pos.Core.Configuration.Protocol (HasProtocolConstants, protocolMagic)
 import qualified Pos.Core.Types                  as T
-import           Pos.Util.Util                   (eitherToFail)
 
 -- | This instance required only for Arbitrary instance of HeaderHash
 -- due to @instance Bi a => Hash a@.
@@ -42,7 +41,7 @@ instance ( Typeable b
     bodyProof <- decode
     consensus <- decode
     extra     <- decode
-    eitherToFail $ T.recreateGenericHeader prevBlock bodyProof consensus extra
+    pure $ T.UnsafeGenericBlockHeader prevBlock bodyProof consensus extra
 
 instance ( Typeable b
          , Bi (T.BHeaderHash b)
@@ -64,4 +63,4 @@ instance ( Typeable b
     header <- decode
     body   <- decode
     extra  <- decode
-    eitherToFail $ T.recreateGenericBlock header body extra
+    pure $ T.UnsafeGenericBlock header body extra

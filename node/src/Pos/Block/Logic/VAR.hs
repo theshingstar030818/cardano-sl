@@ -75,14 +75,22 @@ verifyBlocksPrefix blocks = runExceptT $ do
     adoptedBV <- GS.getAdoptedBV
     let dataMustBeKnown = mustDataBeKnown adoptedBV
     -- And then we run verification of each component.
-    slogUndos <- withExceptT VerifyBlocksError $ slogVerifyBlocks blocks
-    _ <- withExceptT (VerifyBlocksError . pretty) $
+    slogUndos <- tempMeasure "verifyBlocksPrefix.slog" $ withExceptT VerifyBlocksError $ slogVerifyBlocks blocks
+    _ <-
+        tempMeasure "verifyBlocksPrefix.ssc" $
+        withExceptT (VerifyBlocksError . pretty) $
         ExceptT $ sscVerifyBlocks (map toSscBlock blocks)
     TxpGlobalSettings {..} <- view (lensOf @TxpGlobalSettings)
-    txUndo <- withExceptT (VerifyBlocksError . pretty) $
+    txUndo <-
+        tempMeasure "verifyBlocksPrefix.txp" $
+        withExceptT (VerifyBlocksError . pretty) $
         tgsVerifyBlocks dataMustBeKnown $ map toTxpBlock blocks
-    pskUndo <- withExceptT VerifyBlocksError . ExceptT $ dlgVerifyBlocks blocks
-    (pModifier, usUndos) <- withExceptT (VerifyBlocksError . pretty) $
+    pskUndo <-
+        tempMeasure "verifyBlocksPrefix.dlg" $
+        withExceptT VerifyBlocksError . ExceptT $ dlgVerifyBlocks blocks
+    (pModifier, usUndos) <-
+        tempMeasure "verifyBlocksPrefix.us" $
+        withExceptT (VerifyBlocksError . pretty) $
         ExceptT $ usVerifyBlocks dataMustBeKnown (map toUpdateBlock blocks)
     -- Eventually we do a sanity check just in case and return the result.
     when (length txUndo /= length pskUndo) $

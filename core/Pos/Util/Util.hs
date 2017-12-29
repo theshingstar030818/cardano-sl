@@ -639,12 +639,12 @@ logException name = E.handleAsync (\e -> handler e >> E.throw e)
     handler = usingLoggerName name . logError . pretty
 
 
-tempMeasure :: (MonadIO m, WithLogger m) => Text -> m a -> m a
+tempMeasure :: (MonadIO m) => Text -> m a -> m a
 tempMeasure label action = do
     before <- liftIO getCurrentTime
     !x <- action
     after <- liftIO getCurrentTime
     let d :: Integer
-        d = round $ 1000 * toRational (after `diffUTCTime` before)
-    logNotice $ "tempMeasure " <> label <> ": " <> show d
+        d = round $ 1000000 * toRational (after `diffUTCTime` before)
+    putText $ "tempMeasure " <> label <> ": " <> show d
     pure x
