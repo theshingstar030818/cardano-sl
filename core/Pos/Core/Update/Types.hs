@@ -309,7 +309,7 @@ mkSystemTag tag | T.length tag > systemTagMaxLength
 currentSystemTag :: SystemTag
 currentSystemTag =
     let f sys | sys == "mingw32" = "win"
-              | sys == "osx"     = "mac"
+              | sys == "osx"     = "macos"
               | otherwise      = sys
         g archt | archt == "x86_64" = "64"
                 | archt == "i386"   = "32"
