@@ -154,6 +154,7 @@ extra-deps:
 - lens-sop-0.2.0.2
 - json-sop-0.2.0.3
 - servant-generic-0.1.0.1
+- conduit-combinators-1.1.2
 
 # This is for CI to pass --fast to all dependencies
 apply-ghc-options: everything
