@@ -302,11 +302,8 @@ mkSystemTag tag | T.length tag > systemTagMaxLength
 
 -- | @SystemTag@ corresponding to the operating system/architecture pair the program was
 -- compiled in.
--- The @System.Info@ module from @base@ was used
--- (https://hackage.haskell.org/package/base-4.10.1.0/docs/src/System.Info.html#os)
--- but the @os@ and @arch@ values are @String@'s. For an exhaustive list of possible
--- platforms, see
--- https://downloads.haskell.org/~ghc/8.0.1/docs/html/libraries/Cabal-1.24.0.0/Distribution-System.html.
+-- The @Distribution.System@ module from @Cabal@ was used
+-- (https://hackage.haskell.org/package/Cabal-2.0.1.1/docs/Distribution-System.html)
 currentSystemTag :: SystemTag
 currentSystemTag =
     let f sys = case sys of
