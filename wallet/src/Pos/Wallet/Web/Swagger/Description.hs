@@ -141,11 +141,11 @@ instance HasCustomSwagger TxFee where
 
 instance HasCustomSwagger ReformCanceledTxs where
     swaggerModifier = modifyDescription
-        "For given ids of transactions which were once created, \
+        "For all cancelled transactions which were once created, \
         \forms these transactions from scratch and sends them again. \
-        \Only transactions which has been canceled and have PtxWontApply \
-        \state are affected. If no transaction specified, all ever canceled \
-        \ones are reformed and submitted."
+        \Only transactions which have PtxWontApply \
+        \state are affected. It accepts list of banned transactions, \
+        \they won't be reformed."
 
 instance HasCustomSwagger UpdateTx where
     swaggerModifier = modifyDescription

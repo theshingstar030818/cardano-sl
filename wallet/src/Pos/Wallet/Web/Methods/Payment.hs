@@ -241,12 +241,12 @@ reformCanceledTxs sendActions passphrase params = do
     logDebug $ sformat ("List of all canceled transactions ever: "%listJson)
          (map fst canceledTxs)
 
-    txsToRecreate <- case rctpCTxIds params of
-        Nothing -> pure canceledTxs
-        Just requestedCTxs -> do
-            requestedTxs <- mapM decodeCTypeOrFail requestedCTxs
-            let requestedTxsSet = S.fromList requestedTxs
-            pure $ filter ((`S.member` requestedTxsSet) . fst) canceledTxs
+    txsToRecreate <- case rctpBanned params of
+        [] -> pure canceledTxs
+        bannedCTxs -> do
+            bannedTxs <- mapM decodeCTypeOrFail bannedCTxs
+            let bannedTxsSet = S.fromList bannedTxs
+            pure $ filter ((`S.notMember` bannedTxsSet) . fst) canceledTxs
 
     logDebug $ sformat ("Transactions selected for recreation: "%listJson)
         (map fst txsToRecreate)
@@ -270,5 +270,3 @@ reformCanceledTxs sendActions passphrase params = do
         logWarning $ sformat ("Failed to recreate transaction "%build%": "%shown)
              txId e
         return Nothing
-
-
