@@ -51,7 +51,7 @@ dev: &dev
               b: 43.946 # additional minimal fees per byte of transaction size
           unlockStakeEpoch: 18446744073709551615 # last epoch (maxBound @Word64)
         protocolConstants: &dev_core_genesis_spec_protocolConstants
-          k: 2
+          k: 200
           protocolMagic: 55550001
           vssMinTTL: 2
           vssMaxTTL: 6
