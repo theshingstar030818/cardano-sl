@@ -23,6 +23,8 @@ Library
                         Network.Broadcast.OutboundQueue.Types
                         Network.Broadcast.OutboundQueue.ConcurrentMultiQueue
                         Network.Broadcast.OutboundQueue.Demo
+                        Network.Broadcast.PubSub
+                        Network.Broadcast.PubSub.Types
 
                         Node
 
