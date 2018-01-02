@@ -16,6 +16,8 @@ import           Universum
 import           Control.Monad.Catch          (Handler (..), catches)
 import           Formatting                   (build, sformat, shown, stext, (%))
 import           System.Wlog                  (WithLogger, logDebug, logInfo, logWarning)
+import Mockable (delay)
+import Serokell.Util (sec)
 
 import           Pos.Client.Txp.History       (saveTx)
 import           Pos.Communication            (EnqueueMsg, submitTxRaw)
@@ -117,10 +119,11 @@ submitAndSavePtx PtxSubmissionHandlers{..} enqueue ptx@PendingTx{..} = do
         throwM $ InternalError "Transaction creation is disabled by configuration!"
 
     ack <- submitTxRaw enqueue _ptxTxAux
-    reportSubmitted ack
-    saveTx (_ptxTxId, _ptxTxAux) `catches` handlers ack
+    reportSubmitted False
+    delay (sec 18)
+    saveTx (_ptxTxId, _ptxTxAux) `catches` handlers True
     addOnlyNewPendingTx ptx
-    when ack $ ptxUpdateMeta _ptxWallet _ptxTxId PtxMarkAcknowledged
+    -- when ack $ ptxUpdateMeta _ptxWallet _ptxTxId PtxMarkAcknowledged
   where
     handlers accepted =
         [ Handler $ \e ->
@@ -149,4 +152,3 @@ submitAndSavePtx PtxSubmissionHandlers{..} enqueue ptx@PendingTx{..} = do
         logDebug $
         sformat ("submitAndSavePtx: transaction submitted with confirmation?: "
                 %build) ack
-

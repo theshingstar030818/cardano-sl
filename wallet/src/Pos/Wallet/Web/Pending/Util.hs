@@ -53,7 +53,7 @@ mkPendingTx wid _ptxTxId _ptxTxAux th = do
     _ptxCreationSlot <- getCurrentSlotInaccurate
     CWalletMeta{..} <- maybeThrow noWallet =<< getWalletMeta wid
     return PendingTx
-        { _ptxCond = PtxApplying th
+        { _ptxCond = PtxWontApply "bla" th
         , _ptxWallet = wid
         , _ptxPeerAck = False
         , _ptxSubmitTiming = mkPtxSubmitTiming _ptxCreationSlot
