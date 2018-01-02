@@ -15,10 +15,10 @@ import           Serokell.Util                (listJson)
 import           System.Wlog                  (logInfo, WithLogger)
 
 import           Pos.Block.Core               (Block, mainBlockTxPayload)
-import           Pos.Crypto                   (WithHash (..), hash)
+import           Pos.Crypto
 import           Pos.Core.Configuration       (HasConfiguration, genesisHash)
 import           Pos.Core.Types               (ChainDifficulty)
-import           Pos.Core.Class               (difficultyL, headerHash, prevBlockL)
+import           Pos.Core.Class
 import qualified Pos.DB.DB                    as DB
 import qualified Pos.DB.Block                 as DB
 import           Pos.StateLock                (withStateLock, Priority (..), MonadStateLock)
@@ -32,6 +32,8 @@ import           Pos.Wallet.Web.Pending.Types (PendingTx (..), PtxCondition (..)
                                                ptxCond, _PtxApplying, _PtxWontApply,
                                                ptxTxAux, ptxTxId)
 import           Pos.Util.Util                (getKeys)
+
+import System.IO.Unsafe
 
 
 -- | Reevaluate all pending txs (in 'PtxApplying' and 'PtxWontApply' states):
@@ -157,6 +159,9 @@ getTxsBlockStatus txs = foldMapBlocks @ssc $ \block -> do
     let blockTxs   = block ^.. _Right . mainBlockTxPayload . txpTxs . folded
         blockTxIds = HS.fromList $ map hash blockTxs
         blockDiff  = block ^. difficultyL
+    (`seq` pure ()) $ unsafePerformIO $
+        writeFile ("/tmp/txs/" <> show (block ^. epochOrSlotG))
+                  (unwords (map (sformat shortHashF) (toList blockTxIds)))
     pure $ fmap (const blockDiff) $ HS.toMap $ HS.intersection txs blockTxIds
 
 -- | Traverse all blocks in the blockchain (starting from the newest one)
