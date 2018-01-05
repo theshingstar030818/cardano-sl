@@ -292,4 +292,4 @@ msgEnqueueTo msg = case msg of
   _                                   -> EnqueueToAll
 
 class FormatMsg msg where
-  formatMsg :: forall r a. Format r (msg a -> r)
+    formatMsg :: forall r a. Format r (msg a -> r)

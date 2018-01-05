@@ -234,6 +234,7 @@ test-suite cardano-sl-networking-test
   other-modules:       Spec
                        Test.NodeSpec
                        Test.Network.Broadcast.OutboundQueueSpec
+                       Test.Network.Broadcast.PubSubSpec
                        Test.Util
   type:                exitcode-stdio-1.0
   build-depends:       base >= 4.8 && < 5
@@ -253,6 +254,7 @@ test-suite cardano-sl-networking-test
                      , serokell-util >= 0.1.2.3
                      , stm
                      , time-units
+                     , universum
   hs-source-dirs:      test
   default-language:    Haskell2010
   ghc-options:         -threaded

@@ -43,7 +43,9 @@ module Network.Broadcast.OutboundQueue (
   , MaxInFlight(..)
   , Dequeue(..)
   , DequeuePolicy
+  , runDequeuePolicy
     -- ** Failure policy
+  , Failures
   , FailurePolicy
   , ReconsiderAfter(..)
     -- ** Subscription
@@ -63,6 +65,7 @@ module Network.Broadcast.OutboundQueue (
   , SendMsg
   , dequeueThread
     -- ** Controlling the dequeuer
+  , CtrlMsg(..)
   , flush
   , waitShutdown
     -- * Peers
@@ -76,6 +79,16 @@ module Network.Broadcast.OutboundQueue (
   , registerQueueMetrics
   , dumpState
   , currentlyInFlight
+    -- * Signalling
+  , Signal(..)
+  , newSignal
+  , poke
+  , retryIfNothing
+    -- * Auxiliary
+  , ThreadRegistry(..)
+  , forkThread
+  , withThreadRegistry
+  , waitAllThreads
   ) where
 
 import           Control.Concurrent
@@ -197,6 +210,25 @@ data Dequeue = Dequeue {
     , deqMaxInFlight :: MaxInFlight
     }
   deriving (Show)
+
+-- | Run rate limitting of a node.
+runDequeuePolicy :: forall m nid. (MonadIO m, Ord nid, M.Mockable M.Bracket m)
+           => ThreadRegistry m
+           -> Signal CtrlMsg
+           -> MVar (Set nid)
+           -> nid
+           -> Dequeue
+           -> m ()
+runDequeuePolicy threadRegistry signal rateLimited nid Dequeue{..} =
+    case deqRateLimit of
+        NoRateLimiting -> return ()
+        MaxMsgPerSec n -> do
+            let delay = 1000000 `div` n
+            applyMVar_ rateLimited $ Set.insert nid
+            forkThread threadRegistry $ \unmask -> unmask $
+                (liftIO $ threadDelay delay) `M.finally` (liftIO $ do
+                    applyMVar_ rateLimited $ Set.delete nid
+                    poke signal)
 
 -- | Rate limiting
 data RateLimit = NoRateLimiting | MaxMsgPerSec Int
@@ -969,15 +1001,12 @@ intDequeue outQ@OutQ{..} threadRegistry@TR{} sendMsg = do
       -- available again. We start the timer /before/ the send so that the
       -- duration of the send does not affect when the next dequeue can take
       -- places (apart from max-in-flight, of course).
-      case deqRateLimit $ qDequeuePolicy (packetDestType p) of
-        NoRateLimiting -> return ()
-        MaxMsgPerSec n -> do
-          let delay = 1000000 `div` n
-          applyMVar_ qRateLimited $ Set.insert (packetDestId p)
-          forkThread threadRegistry $ \unmask -> unmask $
-            (liftIO $ threadDelay delay) `M.finally` (liftIO $ do
-              applyMVar_ qRateLimited $ Set.delete (packetDestId p)
-              poke qSignal)
+      runDequeuePolicy
+        threadRegistry
+        qSignal
+        qRateLimited
+        (packetDestId p)
+        (qDequeuePolicy (packetDestType p))
 
       forkThread threadRegistry $ \unmask -> do
         logDebug $ debugSending p
@@ -1433,9 +1462,9 @@ data Signal b = Signal {
   , signalCtrlMsg :: IO (Maybe b)
   }
 
-newSignal :: IO (Maybe b) -> IO (Signal b)
+newSignal :: MonadIO m => IO (Maybe b) -> m (Signal b)
 newSignal signalCtrlMsg = do
-    signalPokeVar <- newEmptyMVar
+    signalPokeVar <- liftIO newEmptyMVar
     return Signal{..}
 
 poke :: Signal b -> IO ()
