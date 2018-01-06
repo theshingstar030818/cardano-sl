@@ -137,7 +137,8 @@ awaitCbor = hoist stToIO $ do
     case chunk of
         "" -> pure (Right Nothing)
         bs -> do C.leftover bs
-                 go False =<< lift (Cbor.deserialiseIncremental Bi.decode)
+                 initResult <- lift (Cbor.deserialiseIncremental Bi.decode)
+                 fmap Just <$> go False initResult
   where
     go :: Bool              -- ^ End of input reached?
        -> Bi.IDecode s a    -- ^ Result of decoding so far
