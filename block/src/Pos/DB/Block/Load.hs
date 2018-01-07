@@ -102,14 +102,14 @@ loadDataByDepth getter extraPredicate depth h = do
 -- | Load blunds starting from block with header hash equal to given hash
 -- and while @predicate@ is true.
 loadBlundsWhile
-    :: forall ctx m. (MonadReporting ctx m, MonadDBRead m)
+    :: MonadDBRead m
     => (Block -> Bool) -> HeaderHash -> m (NewestFirst [] Blund)
 loadBlundsWhile predicate = loadDataWhile getBlundThrow (predicate . fst)
 
 -- | Load blunds which have depth less than given (depth = number of
 -- blocks that will be returned).
 loadBlundsByDepth
-    :: forall ctx m. (MonadReporting ctx m, MonadDBRead m)
+    :: MonadDBRead m
     => BlockCount -> HeaderHash -> m (NewestFirst [] Blund)
 loadBlundsByDepth = loadDataByDepth getBlundThrow (const True)
 
@@ -151,14 +151,14 @@ loadHeadersByDepthWhile = loadDataByDepth getHeaderThrow
 -- | Load blunds from BlockDB starting from tip and while the @condition@ is
 -- true.
 loadBlundsFromTipWhile
-    :: forall ctx m. (MonadReporting ctx m, MonadDBRead m)
+    :: MonadDBRead m
     => (Block -> Bool) -> m (NewestFirst [] Blund)
 loadBlundsFromTipWhile condition = getTip >>= loadBlundsWhile condition
 
 -- | Load blunds from BlockDB starting from tip which have depth less than
 -- given.
 loadBlundsFromTipByDepth
-    :: forall ctx m. (MonadReporting ctx m, MonadDBRead m)
+    :: MonadDBRead m
     => BlockCount -> m (NewestFirst [] Blund)
 loadBlundsFromTipByDepth d = getTip >>= loadBlundsByDepth d
 
@@ -183,7 +183,7 @@ getHeaderThrow hash =
     errFmt = "getBlockThrow: no block header with hash: "%shortHashF
 
 getBlundThrow
-    :: forall ctx m. (MonadReporting ctx m, MonadDBRead m)
+    :: MonadDBRead m
     => HeaderHash -> m Blund
 getBlundThrow hash = do
     mBlund <- getBlund hash
