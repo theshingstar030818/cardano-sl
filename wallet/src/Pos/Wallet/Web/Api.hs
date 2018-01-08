@@ -27,10 +27,12 @@ module Pos.Wallet.Web.Api
        , WSettingsApi    , WSettingsApiRecord(..)
        , WBackupApi      , WBackupApiRecord(..)
        , WInfoApi        , WInfoApiRecord(..)
+       , WSystemApi      , WSystemApiRecord(..)
        -- ** Something
        , WalletVerb
 
        -- * Swagger API
+
        , WalletSwaggerApi
        , swaggerWalletApi
        ) where
@@ -127,6 +129,7 @@ data WalletApiRecord route = WalletApiRecord
   , _settings    :: route :- WSettingsApi         -- /settings
   , _backup      :: route :- WBackupApi           -- /backup
   , _info        :: route :- WInfoApi             -- /info
+  , _system      :: route :- WSystemApi           -- /system
   }
   deriving (Generic)
 
@@ -504,6 +507,21 @@ data WBackupApiRecord route = WBackupApiRecord
   deriving (Generic)
 
 -- ~~~~~~~~~~
+--   /system
+-- ~~~~~~~~~~
+
+type WSystemApi = "system" :> ToServant (WSystemApiRecord AsApi)
+
+data WSystemApiRecord route = WSystemApiRecord
+  {
+    _requestShutdown :: route
+    :- "shutdown"
+    :> Summary "Import full information about wallet from a given file."
+    :> WRes Post NoContent
+  }
+  deriving (Generic)
+
+-- ~~~~~~~~~~
 --   /info (client info)
 -- ~~~~~~~~~~
 
@@ -517,6 +535,3 @@ data WInfoApiRecord route = WInfoApiRecord
     :> WRes Get ClientInfo
   }
   deriving (Generic)
-
-
-

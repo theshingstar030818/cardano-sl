@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds    #-}
 {-# LANGUAGE TypeFamilies #-}
 
 -- | Various small endpoints
@@ -15,6 +16,8 @@ module Pos.Wallet.Web.Methods.Misc
        , syncProgress
        , localTimeDifference
 
+       , requestShutdown
+
        , testResetAll
        , dumpState
        , WalletStateSnapshot (..)
@@ -27,14 +30,17 @@ import           Universum
 import           Data.Aeson (encode)
 import           Data.Aeson.TH (defaultOptions, deriveJSON)
 import qualified Data.Text.Buildable
-import           Mockable (MonadMockable)
+import           Mockable (Async, Delay, Mockables, MonadMockable, async, delay)
 import           Pos.Core (SoftwareVersion (..))
 import           Pos.Update.Configuration (HasUpdateConfiguration, curSoftwareVersion)
 import           Pos.Util (maybeThrow)
+import           Serokell.Util (sec)
 import           Servant.API.ContentTypes (MimeRender (..), NoContent (..), OctetStream)
+import           System.Wlog (WithLogger)
 
 import           Pos.Client.KeyStorage (MonadKeys, deleteAllSecretKeys)
 import           Pos.NtpCheck (NtpCheckMonad, NtpStatus (..), mkNtpStatusVar)
+import           Pos.Shutdown (HasShutdownContext, triggerShutdown)
 import           Pos.Slotting (MonadSlots, getCurrentSlotBlocking)
 import           Pos.Wallet.Aeson.ClientTypes ()
 import           Pos.Wallet.Aeson.Storage ()
@@ -92,6 +98,22 @@ postponeUpdate = removeNextUpdate >> return NoContent
 -- | Delete next update info and restart immediately
 applyUpdate :: (MonadWalletDB ctx m, MonadUpdates m) => m NoContent
 applyUpdate = removeNextUpdate >> applyLastUpdate >> return NoContent
+
+----------------------------------------------------------------------------
+-- System
+----------------------------------------------------------------------------
+
+-- | Triggers shutdown in a short interval after called. Delay is
+-- needed in order for http request to succeed.
+requestShutdown ::
+       ( MonadIO m
+       , MonadReader ctx m
+       , WithLogger m
+       , HasShutdownContext ctx
+       , Mockables m [Async, Delay]
+       )
+    => m NoContent
+requestShutdown = NoContent <$ async (delay (sec 1) >> triggerShutdown)
 
 ----------------------------------------------------------------------------
 -- Sync progress
