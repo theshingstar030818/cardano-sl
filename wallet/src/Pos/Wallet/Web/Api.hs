@@ -41,12 +41,12 @@ import           Universum
 import           Control.Lens (from)
 import           Control.Monad.Catch (try)
 import           Data.Reflection (Reifies (..))
-import           Servant.API ((:<|>), (:>), Capture, Delete, Description, Get, JSON, Post, Put,
+import           Servant.API ((:<|>), (:>), (:<|>)(..), Capture, Delete, Description, Get, JSON, Post, Put,
                               QueryParam, ReqBody, Summary, Verb)
 import           Servant.API.ContentTypes (NoContent, OctetStream)
 import           Servant.Generic ((:-), AsApi, ToServant)
 import           Servant.Swagger.UI (SwaggerSchemaUI)
-
+import           Servant.Client (client)
 import           Pos.Client.Txp.Util (InputSelectionPolicy)
 import           Pos.Core (Coin, SoftwareVersion)
 import           Pos.Util.Servant (ApiLoggingConfig, CCapture, CQueryParam, CReqBody, DCQueryParam,
@@ -257,6 +257,11 @@ data WAccountsApiRecord route = WAccountsApiRecord
 -- ~~~~~~~~~~
 --   /addresses
 -- ~~~~~~~~~~
+
+newAddressC :<|> isValidAddressC  = client waddressesApi 
+
+waddressesApi :: Proxy WAddressesApi 
+waddressesApi = Proxy
 
 -- | The "/addresses" branch of the API
 type WAddressesApi = "addresses" :> ToServant (WAddressesApiRecord AsApi)

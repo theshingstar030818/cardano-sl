@@ -144,6 +144,7 @@ library
                       , servant-generic
                       , servant-multipart >= 0.10
                       , servant-server >= 0.8.1
+                      , servant-client
                       , servant-swagger
                       , servant-swagger-ui
                       , stm
