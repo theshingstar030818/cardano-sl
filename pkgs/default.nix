@@ -186,6 +186,22 @@ self: {
           description = "Singleton Tuple";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      Only = callPackage ({ base, deepseq, mkDerivation, stdenv }:
+      mkDerivation {
+          pname = "Only";
+          version = "0.1";
+          sha256 = "ab7aa193e8c257d3bda6b0b3c1cbcf74cdaa85ab08cb20c2dd62ba248c1ab265";
+          revision = "1";
+          editedCabalFile = "1ahk7p34kmh041mz7lyc10nhcxgv2i4z8nvzxvqm2x34gslmsbzr";
+          libraryHaskellDepends = [
+            base
+            deepseq
+          ];
+          doHaddock = false;
+          doCheck = false;
+          description = "The 1-tuple type or single-value \"collection\"";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
       QuickCheck = callPackage ({ base, containers, mkDerivation, random, stdenv, template-haskell, tf-random, transformers }:
       mkDerivation {
           pname = "QuickCheck";
@@ -390,13 +406,13 @@ self: {
           description = "Adjunctions and representable functors";
           license = stdenv.lib.licenses.bsd3;
         }) {};
-      aeson = callPackage ({ attoparsec, base, base-compat, bytestring, containers, deepseq, dlist, ghc-prim, hashable, mkDerivation, scientific, stdenv, tagged, template-haskell, text, time, time-locale-compat, unordered-containers, uuid-types, vector }:
+      aeson = callPackage ({ attoparsec, base, base-compat, bytestring, containers, deepseq, dlist, ghc-prim, hashable, mkDerivation, scientific, stdenv, tagged, template-haskell, text, time, time-locale-compat, unordered-containers, vector }:
       mkDerivation {
           pname = "aeson";
-          version = "1.1.2.0";
-          sha256 = "37488cfbf6ecf65c4d63164d760c1a0f3bcc3371a35a50e5c4a3c0fd2ffac5ff";
+          version = "1.0.2.1";
+          sha256 = "e0a66fba0a9996063d0e241b0b868c6271b6aeb457821a78bfcaac5d84c89066";
           revision = "1";
-          editedCabalFile = "06acsik1qcn5r1z1y3n7iw5h8x0h3hdcjii0bq9nf9ncvc71h1d4";
+          editedCabalFile = "1wfplxb4bppx2bqxbwprl09w9h9bfwn4ak97g8nrdrm30xfqv16g";
           libraryHaskellDepends = [
             attoparsec
             base
@@ -414,7 +430,6 @@ self: {
             time
             time-locale-compat
             unordered-containers
-            uuid-types
             vector
           ];
           doHaddock = false;
@@ -902,6 +917,24 @@ self: {
           doCheck = false;
           homepage = "http://github.com/vincenthz/hs-byteable";
           description = "Type class for sequence of bytes";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
+      bytedump = callPackage ({ base, bytestring, mkDerivation, stdenv }:
+      mkDerivation {
+          pname = "bytedump";
+          version = "1.0";
+          sha256 = "ae17b5040f0423eec792505f14d1d3e53f5ff81ddf83524f1c5dc7a16c0dc0dd";
+          isLibrary = true;
+          isExecutable = true;
+          enableSeparateDataOutput = true;
+          libraryHaskellDepends = [
+            base
+            bytestring
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/vincenthz/hs-bytedump";
+          description = "Flexible byte dump helpers for human readers";
           license = stdenv.lib.licenses.bsd3;
         }) {};
       byteorder = callPackage ({ base, mkDerivation, stdenv }:
@@ -1832,7 +1865,7 @@ self: {
           description = "Cardano SL - the SSC class";
           license = stdenv.lib.licenses.mit;
         }) {};
-      cardano-sl-tools = callPackage ({ Chart, Chart-diagrams, Glob, MonadRandom, QuickCheck, aeson, ansi-wl-pprint, array, async, attoparsec, base, base58-bytestring, bytestring, canonical-json, cardano-report-server, cardano-sl, cardano-sl-core, cardano-sl-db, cardano-sl-infra, cardano-sl-lrc, cardano-sl-ssc, cardano-sl-txp, containers, cpphs, cryptonite, data-default, directory, ed25519, ether, fgl, filepath, foldl, formatting, graphviz, kademlia, lens, lifted-async, log-warper, mkDerivation, mtl, neat-interpolation, node-sketch, optparse-applicative, parsec, pipes, pipes-bytestring, pipes-interleave, pipes-safe, process, random, random-shuffle, safe-exceptions, serokell-util, silently, stdenv, stm, system-filepath, tar, text, text-format, time, time-units, universum, unix, unix-compat, unordered-containers, vector, yaml }:
+      cardano-sl-tools = callPackage ({ Chart, Chart-diagrams, Glob, MonadRandom, QuickCheck, acid-state, aeson, ansi-terminal, ansi-wl-pprint, array, async, attoparsec, base, base58-bytestring, bytestring, canonical-json, cardano-report-server, cardano-sl, cardano-sl-core, cardano-sl-db, cardano-sl-infra, cardano-sl-lrc, cardano-sl-ssc, cardano-sl-txp, cardano-sl-wallet, containers, cpphs, cryptonite, data-default, dhall, directory, ed25519, ether, fgl, filepath, foldl, formatting, graphviz, haskoin-core, kademlia, lens, lifted-async, log-warper, mkDerivation, mtl, neat-interpolation, node-sketch, optparse-applicative, optparse-generic, parsec, pipes, pipes-bytestring, pipes-interleave, pipes-safe, process, random, random-shuffle, safe-exceptions, serokell-util, silently, stdenv, stm, string-conv, system-filepath, tar, text, text-format, time, time-units, universum, unix, unix-compat, unordered-containers, vector, yaml }:
       mkDerivation {
           pname = "cardano-sl-tools";
           version = "1.0.3";
@@ -1840,7 +1873,9 @@ self: {
           isLibrary = false;
           isExecutable = true;
           executableHaskellDepends = [
+            acid-state
             aeson
+            ansi-terminal
             ansi-wl-pprint
             array
             async
@@ -1857,11 +1892,13 @@ self: {
             cardano-sl-lrc
             cardano-sl-ssc
             cardano-sl-txp
+            cardano-sl-wallet
             Chart
             Chart-diagrams
             containers
             cryptonite
             data-default
+            dhall
             directory
             ed25519
             ether
@@ -1871,6 +1908,7 @@ self: {
             formatting
             Glob
             graphviz
+            haskoin-core
             kademlia
             lens
             lifted-async
@@ -1880,6 +1918,7 @@ self: {
             neat-interpolation
             node-sketch
             optparse-applicative
+            optparse-generic
             parsec
             pipes
             pipes-bytestring
@@ -1893,6 +1932,7 @@ self: {
             serokell-util
             silently
             stm
+            string-conv
             system-filepath
             tar
             text
@@ -2220,6 +2260,25 @@ self: {
           description = "Serialize instances for Data.Vector types.";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      charset = callPackage ({ array, base, bytestring, containers, mkDerivation, semigroups, stdenv, unordered-containers }:
+      mkDerivation {
+          pname = "charset";
+          version = "0.3.7.1";
+          sha256 = "3d415d2883bd7bf0cc9f038e8323f19c71e07dd12a3c712f449ccb8b4daac0be";
+          libraryHaskellDepends = [
+            array
+            base
+            bytestring
+            containers
+            semigroups
+            unordered-containers
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/ekmett/charset";
+          description = "Fast unicode character sets based on complemented PATRICIA tries";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
       clock = callPackage ({ base, mkDerivation, stdenv }:
       mkDerivation {
           pname = "clock";
@@ -2281,8 +2340,8 @@ self: {
           pname = "comonad";
           version = "5.0.2";
           sha256 = "1bb0fe396ecd16008411862ee453e8bd7c3e0f3a7299537dd59466604a54b784";
-          revision = "1";
-          editedCabalFile = "1lnsnx8p3wlfhd1xfc68za3b00vq77z2m6b0vqiw2laqmpj9akcw";
+          revision = "2";
+          editedCabalFile = "1ngks9bym68rw0xdq43n14nay4kxdxv2n7alwfd9wcpismfz009g";
           setupHaskellDepends = [
             base
             Cabal
@@ -2504,6 +2563,25 @@ self: {
           description = "A liberalised re-implementation of cpp, the C pre-processor";
           license = "LGPL";
         }) {};
+      cryptohash = callPackage ({ base, byteable, bytestring, cryptonite, ghc-prim, memory, mkDerivation, stdenv }:
+      mkDerivation {
+          pname = "cryptohash";
+          version = "0.11.9";
+          sha256 = "c28f847fc1fcd65b6eea2e74a100300af940919f04bb21d391f6a773968f22fb";
+          libraryHaskellDepends = [
+            base
+            byteable
+            bytestring
+            cryptonite
+            ghc-prim
+            memory
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/vincenthz/hs-cryptohash";
+          description = "collection of crypto hashes, fast, pure and practical";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
       cryptohash-md5 = callPackage ({ base, bytestring, mkDerivation, stdenv }:
       mkDerivation {
           pname = "cryptohash-md5";
@@ -2702,6 +2780,51 @@ self: {
           doCheck = false;
           homepage = "https://github.com/haskell-compat/deriving-compat";
           description = "Backports of GHC deriving extensions";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
+      dhall = callPackage ({ ansi-wl-pprint, base, base16-bytestring, bytestring, case-insensitive, charset, containers, contravariant, cryptohash, exceptions, http-client, http-client-tls, lens, mkDerivation, optparse-generic, parsers, prettyprinter, stdenv, system-fileio, system-filepath, text, text-format, transformers, trifecta, unordered-containers, vector }:
+      mkDerivation {
+          pname = "dhall";
+          version = "1.8.2";
+          sha256 = "520184b58a70e4ac5dc3dc0b39bee64c279b5cdebd2b178aee6934cbb30899d2";
+          isLibrary = true;
+          isExecutable = true;
+          libraryHaskellDepends = [
+            ansi-wl-pprint
+            base
+            base16-bytestring
+            bytestring
+            case-insensitive
+            charset
+            containers
+            contravariant
+            cryptohash
+            exceptions
+            http-client
+            http-client-tls
+            lens
+            parsers
+            prettyprinter
+            system-fileio
+            system-filepath
+            text
+            text-format
+            transformers
+            trifecta
+            unordered-containers
+            vector
+          ];
+          executableHaskellDepends = [
+            base
+            optparse-generic
+            prettyprinter
+            system-filepath
+            text
+            trifecta
+          ];
+          doHaddock = false;
+          doCheck = false;
+          description = "A configuration language guaranteed to terminate";
           license = stdenv.lib.licenses.bsd3;
         }) {};
       diagrams-core = callPackage ({ adjunctions, base, containers, distributive, dual-tree, lens, linear, mkDerivation, monoid-extras, mtl, profunctors, semigroups, stdenv, unordered-containers }:
@@ -3781,6 +3904,43 @@ self: {
           description = "A class for types that can be converted to a hash value";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      haskoin-core = callPackage ({ QuickCheck, aeson, base, base16-bytestring, byteable, bytestring, cereal, conduit, containers, cryptohash, deepseq, either, entropy, largeword, mkDerivation, mtl, murmur3, network, pbkdf, secp256k1, split, stdenv, string-conversions, text, time, vector }:
+      mkDerivation {
+          pname = "haskoin-core";
+          version = "0.4.2";
+          sha256 = "f35bce54c208c7445fa0588eb945c207a2eeff3cb1c5e1ae854afa876752d45b";
+          libraryHaskellDepends = [
+            aeson
+            base
+            base16-bytestring
+            byteable
+            bytestring
+            cereal
+            conduit
+            containers
+            cryptohash
+            deepseq
+            either
+            entropy
+            largeword
+            mtl
+            murmur3
+            network
+            pbkdf
+            QuickCheck
+            secp256k1
+            split
+            string-conversions
+            text
+            time
+            vector
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/haskoin/haskoin";
+          description = "Implementation of the core Bitcoin protocol features";
+          license = stdenv.lib.licenses.publicDomain;
+        }) {};
       heaps = callPackage ({ Cabal, base, cabal-doctest, mkDerivation, stdenv }:
       mkDerivation {
           pname = "heaps";
@@ -4367,6 +4527,21 @@ self: {
           description = "Kan extensions, Kan lifts, various forms of the Yoneda lemma, and (co)density (co)monads";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      largeword = callPackage ({ base, binary, mkDerivation, stdenv }:
+      mkDerivation {
+          pname = "largeword";
+          version = "1.2.5";
+          sha256 = "00b3b06d846649bf404f52a725c88349a38bc8c810e16c99f3100c4e1e9d7d46";
+          libraryHaskellDepends = [
+            base
+            binary
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "https://github.com/idontgetoutmuch/largeword";
+          description = "Provides Word128, Word192 and Word256 and a way of producing other large words if required";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
       lens = callPackage ({ Cabal, array, base, base-orphans, bifunctors, bytestring, cabal-doctest, call-stack, comonad, containers, contravariant, distributive, exceptions, filepath, free, ghc-prim, hashable, kan-extensions, mkDerivation, mtl, parallel, profunctors, reflection, semigroupoids, semigroups, stdenv, tagged, template-haskell, text, th-abstraction, transformers, transformers-compat, unordered-containers, vector, void }:
       mkDerivation {
           pname = "lens";
@@ -4819,6 +4994,22 @@ self: {
           description = "Monad classes, using functional dependencies";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      murmur3 = callPackage ({ base, bytestring, cereal, mkDerivation, stdenv }:
+      mkDerivation {
+          pname = "murmur3";
+          version = "1.0.3";
+          sha256 = "102c81e0e6ae604f51bccced6d2d493f4de0b65e856cd0492a17f9f8e4d51f2a";
+          libraryHaskellDepends = [
+            base
+            bytestring
+            cereal
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/plaprade/murmur3";
+          description = "Pure Haskell implementation of the MurmurHash3 x86_32 algorithm";
+          license = stdenv.lib.licenses.publicDomain;
+        }) {};
       mwc-random = callPackage ({ base, math-functions, mkDerivation, primitive, stdenv, time, vector }:
       mkDerivation {
           pname = "mwc-random";
@@ -5136,6 +5327,28 @@ self: {
           description = "Utilities and combinators for parsing command line options";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      optparse-generic = callPackage ({ Only, base, bytestring, mkDerivation, optparse-applicative, semigroups, stdenv, system-filepath, text, time, transformers, void }:
+      mkDerivation {
+          pname = "optparse-generic";
+          version = "1.2.2";
+          sha256 = "ff7952d6804e0afc032b1c7edb60fa208cd88e7eb93d8e1a18bd9064058d1284";
+          libraryHaskellDepends = [
+            base
+            bytestring
+            Only
+            optparse-applicative
+            semigroups
+            system-filepath
+            text
+            time
+            transformers
+            void
+          ];
+          doHaddock = false;
+          doCheck = false;
+          description = "Auto-generate a command-line parser for your datatype";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
       optparse-simple = callPackage ({ base, either, gitrev, mkDerivation, optparse-applicative, stdenv, template-haskell, transformers }:
       mkDerivation {
           pname = "optparse-simple";
@@ -5185,6 +5398,56 @@ self: {
           doCheck = false;
           homepage = "https://github.com/aslatter/parsec";
           description = "Monadic parser combinators";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
+      parsers = callPackage ({ Cabal, attoparsec, base, base-orphans, cabal-doctest, charset, containers, mkDerivation, mtl, parsec, scientific, semigroups, stdenv, text, transformers, unordered-containers }:
+      mkDerivation {
+          pname = "parsers";
+          version = "0.12.7";
+          sha256 = "65105b2fa169f6bb71dd0f8cbae15d916e8b6d9ee03e28ed5e8cf8e6017c4d0c";
+          setupHaskellDepends = [
+            base
+            Cabal
+            cabal-doctest
+          ];
+          libraryHaskellDepends = [
+            attoparsec
+            base
+            base-orphans
+            charset
+            containers
+            mtl
+            parsec
+            scientific
+            semigroups
+            text
+            transformers
+            unordered-containers
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/ekmett/parsers/";
+          description = "Parsing combinators";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
+      pbkdf = callPackage ({ base, binary, byteable, bytedump, bytestring, cryptohash, mkDerivation, stdenv, utf8-string }:
+      mkDerivation {
+          pname = "pbkdf";
+          version = "1.1.1.1";
+          sha256 = "ddc5755cc895b00af47cadf70f71c0a97675659754a137c403200e62d54476d9";
+          libraryHaskellDepends = [
+            base
+            binary
+            byteable
+            bytedump
+            bytestring
+            cryptohash
+            utf8-string
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "https://github.com/cdornan/pbkdf";
+          description = "Haskell implementation of the PBKDF functions from RFC-2898";
           license = stdenv.lib.licenses.bsd3;
         }) {};
       pem = callPackage ({ base, base64-bytestring, bytestring, mkDerivation, mtl, stdenv }:
@@ -5390,13 +5653,35 @@ self: {
           description = "Pretty-printing library";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      prettyprinter = callPackage ({ base, mkDerivation, stdenv, template-haskell, text }:
+      mkDerivation {
+          pname = "prettyprinter";
+          version = "1.1.1";
+          sha256 = "a0b32ee64d410436e6b411f7f1349a8763b9c26e144abc671b798da72f7feecf";
+          isLibrary = true;
+          isExecutable = true;
+          libraryHaskellDepends = [
+            base
+            text
+          ];
+          executableHaskellDepends = [
+            base
+            template-haskell
+            text
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/quchen/prettyprinter";
+          description = "A modern, easy to use, well-documented, extensible prettyprinter";
+          license = stdenv.lib.licenses.bsd2;
+        }) {};
       primitive = callPackage ({ base, ghc-prim, mkDerivation, stdenv, transformers }:
       mkDerivation {
           pname = "primitive";
-          version = "0.6.2.0";
-          sha256 = "b8e8d70213e22b3fab0e0d11525c02627489618988fdc636052ca0adce282ae1";
+          version = "0.6.1.0";
+          sha256 = "93731fa72eaf74e8e83453f080828e18cec9fbc82bee91b49ba8b61c043d38c8";
           revision = "1";
-          editedCabalFile = "0d61g8ppsdajdqykl2kc46kq00aamsf12v60ilgrf58dbji9sz56";
+          editedCabalFile = "0gb8lcn6bd6ilfln7ah9jmqq6324vgkrgdsnz1qvlyj3bi2w5ivf";
           libraryHaskellDepends = [
             base
             ghc-prim
@@ -5587,6 +5872,32 @@ self: {
           doHaddock = false;
           doCheck = false;
           description = "Random shuffle implementation";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
+      reducers = callPackage ({ array, base, bytestring, containers, fingertree, hashable, mkDerivation, semigroupoids, semigroups, stdenv, text, transformers, unordered-containers }:
+      mkDerivation {
+          pname = "reducers";
+          version = "3.12.1";
+          sha256 = "e43bb7678272691a358c049daecbac715c4b0fcece021c6b2ac7b2a1c16b6d5e";
+          revision = "2";
+          editedCabalFile = "00zxyyaj0grvr214qdrg68114b93iwp27vmww254s2yq9z701gf8";
+          libraryHaskellDepends = [
+            array
+            base
+            bytestring
+            containers
+            fingertree
+            hashable
+            semigroupoids
+            semigroups
+            text
+            transformers
+            unordered-containers
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/ekmett/reducers/";
+          description = "Semigroups, specialized containers and a general map/reduce framework";
           license = stdenv.lib.licenses.bsd3;
         }) {};
       reflection = callPackage ({ base, mkDerivation, stdenv, template-haskell }:
@@ -5801,6 +6112,32 @@ self: {
           homepage = "http://github.com/informatikr/scrypt";
           description = "Stronger password hashing via sequential memory-hard functions";
           license = stdenv.lib.licenses.bsd3;
+        }) {};
+      secp256k1 = callPackage ({ Cabal, QuickCheck, base, base16-bytestring, binary, bytestring, entropy, largeword, mkDerivation, mtl, stdenv, string-conversions }:
+      mkDerivation {
+          pname = "secp256k1";
+          version = "0.4.8";
+          sha256 = "13fb455af6874fb9a52adb85a52bfcfbcab5e80eb18b410fa088a92cabd3db4a";
+          setupHaskellDepends = [
+            base
+            Cabal
+          ];
+          libraryHaskellDepends = [
+            base
+            base16-bytestring
+            binary
+            bytestring
+            entropy
+            largeword
+            mtl
+            QuickCheck
+            string-conversions
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/haskoin/secp256k1-haskell#readme";
+          description = "Bindings for secp256k1 library from Bitcoin Core";
+          license = stdenv.lib.licenses.publicDomain;
         }) {};
       semigroupoids = callPackage ({ Cabal, base, base-orphans, bifunctors, cabal-doctest, comonad, containers, contravariant, distributive, hashable, mkDerivation, semigroups, stdenv, tagged, transformers, transformers-compat, unordered-containers }:
       mkDerivation {
@@ -6364,6 +6701,22 @@ self: {
           description = "Common lower-level functions needed by various streaming data libraries";
           license = stdenv.lib.licenses.mit;
         }) {};
+      string-conv = callPackage ({ base, bytestring, mkDerivation, stdenv, text }:
+      mkDerivation {
+          pname = "string-conv";
+          version = "0.1.2";
+          sha256 = "f259a03e6f296af19a71c07ab9a98a38661dfe40679f360f8e371334ea226039";
+          libraryHaskellDepends = [
+            base
+            bytestring
+            text
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "https://github.com/Soostone/string-conv";
+          description = "Standardized conversion between string types";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
       string-conversions = callPackage ({ base, bytestring, mkDerivation, stdenv, text, utf8-string }:
       mkDerivation {
           pname = "string-conversions";
@@ -6503,6 +6856,25 @@ self: {
           homepage = "http://www.cs.uu.nl/wiki/GenericProgramming/SYB";
           description = "Scrap Your Boilerplate";
           license = stdenv.lib.licenses.bsd3;
+        }) {};
+      system-fileio = callPackage ({ base, bytestring, mkDerivation, stdenv, system-filepath, text, time, unix }:
+      mkDerivation {
+          pname = "system-fileio";
+          version = "0.3.16.3";
+          sha256 = "3175707cb322c65760fa2eb2ab17327f251c8294ad688efc6258e82328830491";
+          libraryHaskellDepends = [
+            base
+            bytestring
+            system-filepath
+            text
+            time
+            unix
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "https://github.com/fpco/haskell-filesystem";
+          description = "Consistent filesystem interaction across GHC versions (deprecated)";
+          license = stdenv.lib.licenses.mit;
         }) {};
       system-filepath = callPackage ({ base, bytestring, deepseq, mkDerivation, stdenv, text }:
       mkDerivation {
@@ -6960,6 +7332,45 @@ self: {
           description = "Ad-hoc type classes for lifting";
           license = stdenv.lib.licenses.bsd3;
         }) {};
+      trifecta = callPackage ({ ansi-terminal, ansi-wl-pprint, array, base, blaze-builder, blaze-html, blaze-markup, bytestring, charset, comonad, containers, deepseq, fingertree, ghc-prim, hashable, lens, mkDerivation, mtl, parsers, profunctors, reducers, semigroups, stdenv, transformers, unordered-containers, utf8-string }:
+      mkDerivation {
+          pname = "trifecta";
+          version = "1.6.2.1";
+          sha256 = "bab3724de8ed4f5283deb99013debf2e223e9e2c3c975e7d9b9bd44a9b30fbe5";
+          revision = "1";
+          editedCabalFile = "0qy2nqxn2h20fp9gf5chvgimb2281pjwm075ap7ar7pk2k4n8ljr";
+          libraryHaskellDepends = [
+            ansi-terminal
+            ansi-wl-pprint
+            array
+            base
+            blaze-builder
+            blaze-html
+            blaze-markup
+            bytestring
+            charset
+            comonad
+            containers
+            deepseq
+            fingertree
+            ghc-prim
+            hashable
+            lens
+            mtl
+            parsers
+            profunctors
+            reducers
+            semigroups
+            transformers
+            unordered-containers
+            utf8-string
+          ];
+          doHaddock = false;
+          doCheck = false;
+          homepage = "http://github.com/ekmett/trifecta/";
+          description = "A modern parser combinator library with convenient diagnostics";
+          license = stdenv.lib.licenses.bsd3;
+        }) {};
       tuple = callPackage ({ OneTuple, base, mkDerivation, stdenv }:
       mkDerivation {
           pname = "tuple";
@@ -7219,19 +7630,18 @@ self: {
           description = "a persistent store for values of arbitrary types";
           license = stdenv.lib.licenses.bsd3;
         }) {};
-      vector = callPackage ({ base, deepseq, ghc-prim, mkDerivation, primitive, semigroups, stdenv }:
+      vector = callPackage ({ base, deepseq, ghc-prim, mkDerivation, primitive, stdenv }:
       mkDerivation {
           pname = "vector";
-          version = "0.12.0.1";
-          sha256 = "b100ee79b9da2651276278cd3e0f08a3c152505cc52982beda507515af173d7b";
-          revision = "1";
-          editedCabalFile = "1xjv8876kx9vh86w718vdaaai40pwnsiw8368c5h88ch8iqq10qb";
+          version = "0.11.0.0";
+          sha256 = "0a5320ed44c3f2b04b7f61e0f63f4fcd5b337524e601e01d5813ace3f5a432e4";
+          revision = "2";
+          editedCabalFile = "1kjafhgsyjqlvrpfv2vj17hipyv0zw56a2kbl6khzn5li9szvyib";
           libraryHaskellDepends = [
             base
             deepseq
             ghc-prim
             primitive
-            semigroups
           ];
           doHaddock = false;
           doCheck = false;
