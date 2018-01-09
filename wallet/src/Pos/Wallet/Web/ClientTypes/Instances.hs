@@ -13,7 +13,7 @@ import           Data.Text (splitOn)
 import qualified Data.Text.Buildable
 import           Formatting (bprint, build, int, sformat, (%))
 import qualified Serokell.Util.Base16 as Base16
-import           Servant.API (FromHttpApiData (..))
+import           Servant.API (FromHttpApiData (..), ToHttpApiData (..))
 import           Servant.Multipart (FromMultipart (..), Mem, lookupFile, lookupInput)
 
 import           Pos.Core (Address, Coin, decodeTextAddress, mkCoin, unsafeGetCoin)
@@ -122,6 +122,9 @@ instance FromHttpApiData Address where
 
 instance FromHttpApiData (CId w) where
     parseUrlPiece = pure . CId . CHash
+
+instance ToHttpApiData (CId w) where
+    toQueryParam (CId (CHash text)) = text
 
 instance FromHttpApiData CAccountId where
     parseUrlPiece = fmap CAccountId . parseUrlPiece
