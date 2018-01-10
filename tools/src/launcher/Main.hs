@@ -35,7 +35,7 @@ import           Options.Applicative (Parser, execParser, footerDoc, fullDesc, h
                                       info, infoOption, long, metavar, progDesc, short, strOption)
 import           Serokell.Aeson.Options (defaultOptions)
 import           System.Directory (createDirectoryIfMissing, doesFileExist, removeFile)
-import           System.Environment (getEnv, getExecutablePath)
+import           System.Environment (getEnv, getEnvironment, getExecutablePath, lookupEnv)
 import           System.Exit (ExitCode (..))
 import           System.FilePath ((</>))
 import qualified System.IO as IO
@@ -147,6 +147,7 @@ getLauncherOptions = do
 #else
             logDir <- (</> "Library/Application Support/Daedalus/Logs") <$> getEnv "HOME"
 #endif
+            createDirectoryIfMissing True logDir
             writeFile (logDir </> "config-error.log") $
                 sformat ("Failed to parse "%string%": "%shown) configPath err
             throwM $ LauncherConfigParseError configPath err
@@ -170,19 +171,25 @@ getLauncherOptions = do
         --     updateWindowsRunner, launcherLogsPrefix
         -- %DAEDALUS_DIR%: nodePath, walletPath
         appdata <- toText <$> getEnv "APPDATA"
-        daedalusDir <- toText <$> getEnv "DAEDALUS_DIR"
-        let replaceAppdata = replace "%APPDATA%" appdata
-            replaceDaedalusDir = replace "%DAEDALUS_DIR%" daedalusDir
-        pure lo
-            { loNodeArgs            = map (T.replace "%APPDATA%" appdata) loNodeArgs
-            , loNodeDbPath          = replaceAppdata loNodeDbPath
-            , loNodeLogPath         = replaceAppdata <$> loNodeLogPath
-            , loUpdaterPath         = replaceAppdata loUpdaterPath
-            , loUpdateWindowsRunner = replaceAppdata <$> loUpdateWindowsRunner
-            , loLauncherLogsPrefix  = replaceAppdata <$> loLauncherLogsPrefix
-            , loNodePath            = replaceDaedalusDir loNodePath
-            , loWalletPath          = replaceDaedalusDir <$> loWalletPath
-            }
+        daedalusDirMaybe <- toText <<$>> lookupEnv "DAEDALUS_DIR"
+        case daedalusDirMaybe of
+            Nothing -> do
+                fullEnv <- getEnvironment
+                error $ sformat ("%DAEDALUS_DIR% is not in the environment. "%
+                    "Complete dump of the environment follows:\n"%stext) (show fullEnv)
+            Just daedalusDir -> do
+                let replaceAppdata = replace "%APPDATA%" appdata
+                    replaceDaedalusDir = replace "%DAEDALUS_DIR%" daedalusDir
+                pure lo
+                    { loNodeArgs            = map (T.replace "%APPDATA%" appdata) loNodeArgs
+                    , loNodeDbPath          = replaceAppdata loNodeDbPath
+                    , loNodeLogPath         = replaceAppdata <$> loNodeLogPath
+                    , loUpdaterPath         = replaceAppdata loUpdaterPath
+                    , loUpdateWindowsRunner = replaceAppdata <$> loUpdateWindowsRunner
+                    , loLauncherLogsPrefix  = replaceAppdata <$> loLauncherLogsPrefix
+                    , loNodePath            = replaceDaedalusDir loNodePath
+                    , loWalletPath          = replaceDaedalusDir <$> loWalletPath
+                    }
 #else
     expandVars lo@(LO {..}) = do
         home <- toText <$> getEnv "HOME"
