@@ -14959,7 +14959,7 @@ internal_staging_full: &internal_staging_full
     genesis:
       src:  # TODO: it doesn't exist yet
         file: internal-staging-genesis.json
-        hash: 7b87ebc46aa1607902c93cc234b18911ae35c2a3aec2f371d65da0741c39bbd5
+        hash: ae9c1befee2d942e690104a829926915ef8a5715705b34bcddd84f6391d4f849
   update:
     applicationName: cardano-sl
     applicationVersion: 0
